@@ -90,6 +90,10 @@ TYPE, public :: oft_xmhd_2d_sim
   REAL(r8) :: nl_tol = 1.d-5 !< absolute tolerance for nonlinear solver
   REAL (r8) :: B_0(3) = 0.d0 !< background, static magnetic field
   REAL(r8) :: eta !< electrical resistivity, in units of mu0
+  !--- Reduced Hartmann / wall-drag parameters (LM-MHD extension, default off)
+  LOGICAL :: use_wall_drag = .FALSE. !< Enable reduced wall/Hartmann drag source term
+  REAL(r8) :: drag_coeff = 0.d0 !< Drag coefficient alpha [1/time in problem units]
+  REAL(r8) :: drag_bhat(3) = [0.d0,1.d0,0.d0] !< Unit vector along applied-field direction; drag is NOT applied along this direction
   LOGICAL, CONTIGUOUS, POINTER, DIMENSION(:) :: n_bc => NULL() !< n BC flag
   LOGICAL, CONTIGUOUS, POINTER, DIMENSION(:) :: velx_bc => NULL() !< vel BC flag
   LOGICAL, CONTIGUOUS, POINTER, DIMENSION(:) :: vely_bc => NULL() !< vel BC flag
@@ -724,6 +728,8 @@ INTEGER(i4) :: i,l
 REAL(r8) :: k_boltz = elec_charge
 REAL(r8) :: m_i=proton_mass
 REAL(r8) :: chi, eta, nu, D_diff, gamma, diag_vals(5), B_0(3), diag_vec(3)
+LOGICAL :: use_wall_drag
+REAL(r8) :: drag_coeff, drag_bhat(3)
 REAL(r8), POINTER, DIMENSION(:) :: n_weights,T_weights,psi_weights,by_weights, T_res, &
                               n_res, psi_res, by_res, vtmp, velx_res, vely_res, velz_res
 REAL(r8), POINTER, DIMENSION(:,:) :: vel_weights
@@ -747,12 +753,15 @@ CALL a%get_local(by_weights,7)
 !--- Set constant values
 chi = self%parent_sim%chi
 m_i = self%parent_sim%m_i
-eta = self%parent_sim%eta 
-nu = self%parent_sim%nu 
-gamma = self%parent_sim%gamma 
-D_diff = self%parent_sim%D_diff 
+eta = self%parent_sim%eta
+nu = self%parent_sim%nu
+gamma = self%parent_sim%gamma
+D_diff = self%parent_sim%D_diff
 B_0 = self%parent_sim%B_0
 cyl_flag = self%parent_sim%cyl_flag
+use_wall_drag = self%parent_sim%use_wall_drag
+drag_coeff    = self%parent_sim%drag_coeff
+drag_bhat     = self%parent_sim%drag_bhat
 
 !---Zero result and get storage array
 CALL b%set(0.d0)
@@ -772,11 +781,12 @@ INTEGER(i4) :: k,m,jr
 INTEGER(i4), ALLOCATABLE, DIMENSION(:) :: cell_dofs
 REAL(r8) :: n,vel(3),T,psi,by,dT(3),dn(3),dpsi(3),dby(3)
 REAL(r8) :: dvel(3,3),div_vel,jac_mat(3,4),jac_det,int_factor,btmp(3),tmp1(3),coords(3)
+REAL(r8) :: vdotb_drag !< projection of velocity onto drag_bhat (for wall drag)
 REAL(r8), ALLOCATABLE, DIMENSION(:) :: basis_vals,T_weights_loc,n_weights_loc,psi_weights_loc,by_weights_loc
 REAL(r8), ALLOCATABLE, DIMENSION(:,:) :: vel_weights_loc,basis_grads,res_loc
 !$omp parallel private(k,m,jr,curved,coords,cell_dofs,basis_vals,basis_grads,T_weights_loc, &
 !$omp n_weights_loc,psi_weights_loc, by_weights_loc,vel_weights_loc,res_loc,jac_mat, &
-!$omp jac_det,int_factor,T,n,psi,by,vel,dT,dn,dpsi,dby,dvel,div_vel,btmp, tmp1) reduction(+:diag_vals)
+!$omp jac_det,int_factor,T,n,psi,by,vel,dT,dn,dpsi,dby,dvel,div_vel,btmp,tmp1,vdotb_drag) reduction(+:diag_vals)
 ALLOCATE(basis_vals(oft_blagrange%nce),basis_grads(3,oft_blagrange%nce))
 ALLOCATE(T_weights_loc(oft_blagrange%nce),n_weights_loc(oft_blagrange%nce),&
         psi_weights_loc(oft_blagrange%nce), by_weights_loc(oft_blagrange%nce),&
@@ -848,6 +858,8 @@ DO i=1,mesh%nc
       diag_vals(4) = diag_vals(4) + T*int_factor
       diag_vals(5) = diag_vals(5) + int_factor !total volume
     END IF
+    !---Precompute wall-drag projection (independent of test function index jr)
+    IF(use_wall_drag) vdotb_drag = DOT_PRODUCT(vel, drag_bhat)
     !---Compute local function contributions
     DO jr=1,oft_blagrange%nce
       !---Diffusion
@@ -902,7 +914,23 @@ DO i=1,mesh%nc
             + basis_vals(jr)*self%dt*DOT_PRODUCT(vel,dvel(k,:))*int_factor &
             + nu*self%dt*DOT_PRODUCT(basis_grads(:,jr),dvel(k,:))*int_factor &
             - nu*basis_vals(jr)*self%dt*DOT_PRODUCT(dn,dvel(k,:))*int_factor/n
-        END DO 
+        END DO
+      END IF
+      !---Reduced Hartmann/wall-drag source: S_u = -alpha_drag * u_perp
+      ! u_perp = u - (u.drag_bhat)*drag_bhat  (component perpendicular to applied field)
+      ! Backward-Euler residual convention: F += dt * alpha * phi * u_perp  (positive = dissipation)
+      ! Sign: drag is a damping term; it appears on the LHS of F(u)=F_old with positive sign,
+      ! equivalent to a negative contribution to the RHS of the momentum PDE.
+      IF(use_wall_drag) THEN
+        DO k=1,3
+          IF (cyl_flag) THEN
+            res_loc(jr,k+1) = res_loc(jr,k+1) &
+              + drag_coeff*self%dt*basis_vals(jr)*(vel(k)-vdotb_drag*drag_bhat(k))*int_factor*coords(1)
+          ELSE
+            res_loc(jr,k+1) = res_loc(jr,k+1) &
+              + drag_coeff*self%dt*basis_vals(jr)*(vel(k)-vdotb_drag*drag_bhat(k))*int_factor
+          END IF
+        END DO
       END IF
       !---Temperature
       IF (cyl_flag) THEN
@@ -1011,10 +1039,12 @@ subroutine build_approx_jacobian(self,a)
 class(oft_xmhd_2d_sim), intent(inout) :: self
 class(oft_vector), intent(inout) :: a !< Solution for computing jacobian
 LOGICAL :: cyl_flag, linear
+LOGICAL :: use_wall_drag
 INTEGER(i4) :: i
 REAL(r8) :: k_boltz=elec_charge
 REAL(r8) :: m_i = proton_mass
 REAL(r8) :: chi, eta, nu, D_diff, gamma, B_0(3), diag_vals(7), dt_fac
+REAL(r8) :: drag_coeff, drag_bhat(3)
 REAL(r8), POINTER, DIMENSION(:) :: n_weights,T_weights, psi_weights, by_weights, vtmp
 REAL(r8), POINTER, DIMENSION(:,:) :: vel_weights
 integer(KIND=omp_lock_kind), allocatable, dimension(:) :: tlocks
@@ -1037,16 +1067,19 @@ CALL a%get_local(T_weights,5)
 CALL a%get_local(psi_weights,6)
 CALL a%get_local(by_weights,7)
 !---
-chi = self%chi 
+chi = self%chi
 m_i = self%m_i
-eta = self%eta 
-nu = self%nu 
-gamma = self%gamma 
+eta = self%eta
+nu = self%nu
+gamma = self%gamma
 D_diff = self%D_diff
 B_0 = self%B_0
 cyl_flag = self%cyl_flag
 linear = self%linear
 dt_fac = self%jac_dt
+use_wall_drag = self%use_wall_drag
+drag_coeff    = self%drag_coeff
+drag_bhat     = self%drag_bhat
 
 !--Setup thread locks
 ALLOCATE(tlocks(self%fe_rep%nfields))
@@ -1251,6 +1284,16 @@ DO i=1,mesh%nc
           jac_loc(3,3)%m(jr,jc)= jac_loc(3,3)%m(jr,jc) &
           + dt_fac*basis_vals(jr)*basis_vals(jc)*vel(1)*int_factor &
           + dt_fac*nu*basis_vals(jr)*basis_vals(jc)*int_factor/(coords(1)+gs_epsilon)
+          !---Wall-drag Jacobian (cylindrical): same projection, R-weighted
+          IF(use_wall_drag) THEN
+            DO k=1,3
+              DO l=1,3
+                jac_loc(k+1,l+1)%m(jr,jc) = jac_loc(k+1,l+1)%m(jr,jc) &
+                  + dt_fac*drag_coeff*basis_vals(jr)*basis_vals(jc) &
+                    *(merge(1.d0,0.d0,k==l) - drag_bhat(k)*drag_bhat(l))*int_factor*coords(1)
+              END DO
+            END DO
+          END IF
         ELSE
           DO k=1,3
             jac_loc(k+1,k+1)%m(jr,jc)= jac_loc(k+1,k+1)%m(jr,jc) &
@@ -1263,6 +1306,17 @@ DO i=1,mesh%nc
               + dt_fac*basis_vals(jr)*basis_vals(jc)*dvel(k, l)*int_factor
             END DO
           END DO
+          !---Wall-drag Jacobian: d/d(vel_l)[ alpha * phi_jr * (v_k - (v.bhat)*bhat_k) * phi_jc ]
+          !   = alpha * phi_jr * phi_jc * (delta_kl - bhat_k * bhat_l)
+          IF(use_wall_drag) THEN
+            DO k=1,3
+              DO l=1,3
+                jac_loc(k+1,l+1)%m(jr,jc) = jac_loc(k+1,l+1)%m(jr,jc) &
+                  + dt_fac*drag_coeff*basis_vals(jr)*basis_vals(jc) &
+                    *(merge(1.d0,0.d0,k==l) - drag_bhat(k)*drag_bhat(l))*int_factor
+              END DO
+            END DO
+          END IF
         END IF
         ! --vel, T
         IF (cyl_flag) THEN
