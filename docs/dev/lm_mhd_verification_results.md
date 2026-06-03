@@ -23,10 +23,14 @@ agree to ~0.1%** on the normalized velocity profile and on the discriminating sc
 computed profile shape* matches the Hartmann number *predicted from the input parameters*
 (`Ha = B0·a/√(μ0·η·ρ·ν)`) to **0.1%**, independently confirming both the geometry mapping and
 the parameter scaling. The analytic + mhdFoam legs cover `Ha ∈ {1,5,10,20,50}`; the resolved-MUG
-leg is confirmed at `Ha ∈ {2,5}` (an attempted `Ha=10` run on a finer 160-cell uniform mesh did
-not reach steady state within the run window and was stopped — higher Ha needs wall-normal mesh
-grading the uniform 2D mesh does not provide; see §6). Task B (Hunt conducting-wall duct) is
-addressed with a finite-difference reference; see §7.
+leg is confirmed at `Ha ∈ {2,3,5}` (runs at `Ha ≥ 7` did not reach steady state within the run
+window — the implicit solve stiffens on the finer meshes higher Ha needs; see §6). Task B (Hunt
+conducting-wall duct) is addressed with a finite-difference reference; see §7.
+
+**Presentation-quality figures** (smplotlib-styled) are in `cases/hartmann/results/report/`:
+`threeway_overlay_Ha5.png` (analytic/mhdFoam/MUG with a residual inset showing ~1e-4 agreement),
+`umean_uc_vs_Ha.png` (cross-code scaling of the discriminating scalar), `error_vs_Ha.png`
+(both codes' L2 vs analytic, ≲1e-3), and `flowrate_vs_Ha.png` (analytic Q*~1/Ha suppression).
 
 ---
 
@@ -64,11 +68,12 @@ applied field `B_0=(0,0,B0)` (wall-normal, in-plane), `n,T` frozen (incompressib
 | Ha (pred) | B0 | mesh (y cells) | Ha (fit) | fit/pred | profile L2 vs analytic | u_mean/u_c (MUG / analytic) |
 |----|----|----|----|----|----|----|
 | 2.002 | 2.244e-3 | 80  | 2.002 | 1.000 | 4.67e-5 | 0.7056 / 0.7056 |
+| 3.002 | 3.366e-3 | 80  | 3.003 | 1.000 | 6.61e-5 | 0.7421 / 0.7421 |
 | 4.995 | 5.60e-3  | 80  | 4.998 | 1.001 | 1.25e-4 | 0.8108 / 0.8109 |
-| 9.99  | 1.122e-2 | 160 | _not finalized_ | — | — | — |
+| ≥7    | —        | 80–160 | _not finalized_ | — | — | — |
 
 The Hartmann number **fitted from the computed profile shape** matches the **predicted Ha from
-inputs** to ≤0.1% at both Ha=2 and Ha=5, the profiles match analytic to L2 ~1e-4, and `u_mean/u_c`
+inputs** to ≤0.1% at Ha=2, 3, and 5, the profiles match analytic to L2 ~1e-4, and `u_mean/u_c`
 matches to ≤1e-4. The fully-developed assumption is verified: `velx` is uniform in x to <1e-6.
 This confirms both the geometry mapping (x–z mesh plane, y out-of-plane; induced `b_x = -dψ/dz`)
 and the scaling `Ha = B0·a/√(μ0·η·ρ·ν)`. **The Ha=10 run** on a finer 160-cell uniform mesh did
@@ -85,7 +90,7 @@ solver question.
 |------|--------|-------|
 | A1 analytic Hartmann | ✅ complete | `analytic_hartmann.py` self-test passes (Poiseuille 2/3, plug→1, Q*~1/Ha, exact vs numeric <1e-8). |
 | A3 mhdFoam Hartmann | ✅ complete | Ha∈{1,5,10,20,50}, agreement ~1e-3. |
-| A2 resolved MUG Hartmann | ✅ complete (Ha≤5) | Ha∈{2,5}; Ha mapping confirmed to 0.1%. Ha=10 attempted but not finalized (slow implicit solve on finer uniform mesh, §6). |
+| A2 resolved MUG Hartmann | ✅ complete (Ha≤5) | Ha∈{2,3,5}; Ha mapping confirmed to 0.1%. Ha≥7 attempted but not finalized (implicit solve stiffens on finer meshes, §6). |
 | B analytic Hunt | see §7 | conducting-wall duct, side jets. |
 | B MUG Hunt | not attempted | Hunt needs a *different* geometry (out-of-plane axial flow `vely(x,z)`, conducting Hartmann-wall EM BC). The Task-A MUG geometry (in-plane channel) does not transfer directly; flagged as next step rather than risk a long debug overnight. |
 
