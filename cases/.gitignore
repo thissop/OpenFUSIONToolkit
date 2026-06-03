@@ -1,18 +1,25 @@
-# OpenFOAM run directories (large mesh/field/VTK output) — keep template + results only
+# --- OpenFOAM run directories (large mesh/field/VTK output) — keep template + results ---
 hartmann/openfoam/Ha_*/
 hartmann/openfoam/template/*/[0-9]*/
 **/VTK/
 **/postProcessing/
 **/processor*/
-**/*.OpenFOAM
-**/log.*
-**/foamToVTK.log
-# Python caches
+
+# --- MUG run scratch — keep canonical oft.in, extracted *_profile.csv, overlay PNG ---
+hartmann/mug/Ha_*/                 # per-Ha run subdirs (contain the 4MB binary, logs)
+hartmann/mug/test_hartmann_mug     # copied binary
+hartmann/mug/*.profile             # raw extracted profiles
+hartmann/mug/*.bak
+hartmann/mug/run.log
+hartmann/mug/xmhd2d_*.rst
+hartmann/mug/xmhd_2d.hist
+hartmann/mug/profile_binned.csv
+
+# --- compiled / cache ---
 **/__pycache__/
 *.pyc
-# MUG run scratch
-hartmann/mug/*.profile
-hartmann/mug/oft.in
-hartmann/mug/*.rst
-hartmann/mug/*.hist
-**/xmhd_2d*
+**/log.blockMesh
+**/log.mhdFoam
+**/log.sample
+**/foamToVTK.log
+**/xmhd_2d.hist
