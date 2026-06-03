@@ -23,8 +23,10 @@ agree to ~0.1%** on the normalized velocity profile and on the discriminating sc
 computed profile shape* matches the Hartmann number *predicted from the input parameters*
 (`Ha = B0·a/√(μ0·η·ρ·ν)`) to **0.1%**, independently confirming both the geometry mapping and
 the parameter scaling. The analytic + mhdFoam legs cover `Ha ∈ {1,5,10,20,50}`; the resolved-MUG
-leg covers `Ha ∈ {2,5,10}` (higher Ha needs wall-normal mesh grading the uniform 2D mesh does
-not provide — see §6). Task B (Hunt conducting-wall duct) is addressed analytically; see §7.
+leg is confirmed at `Ha ∈ {2,5}` (an attempted `Ha=10` run on a finer 160-cell uniform mesh did
+not reach steady state within the run window and was stopped — higher Ha needs wall-normal mesh
+grading the uniform 2D mesh does not provide; see §6). Task B (Hunt conducting-wall duct) is
+addressed with a finite-difference reference; see §7.
 
 ---
 
@@ -37,11 +39,15 @@ table: `cases/hartmann/results/error_table.md`. Overlay plots: `cases/hartmann/r
 | Ha | u_mean/u_c (analytic) | mhdFoam L2 | mhdFoam Linf | mhdFoam u_mean/u_c (relerr) | MUG L2 | MUG u_mean/u_c (relerr) |
 |----|----|----|----|----|----|----|
 | 1  | 0.6774 | 1.04e-3 | 1.08e-3 | 0.6783 (1.3e-3) | — | — |
-| 2  | 0.7355 | — | — | — | _(MUG, see §3)_ | _(see §3)_ |
+| 2  | 0.7355 | — (no OF run) | — | — | 4.67e-5 | 0.7056 (≈0) |
 | 5  | 0.8109 | 1.95e-4 | 2.94e-4 | 0.8118 (1.1e-3) | 1.25e-4 | 0.8108 (1.2e-4) |
-| 10 | 0.9001 | 6.90e-4 | 1.19e-3 | 0.9012 (1.3e-3) | _(MUG, see §3)_ | _(see §3)_ |
+| 10 | 0.9001 | 6.90e-4 | 1.19e-3 | 0.9012 (1.3e-3) | — (not finalized) | — |
 | 20 | 0.9500 | 5.79e-4 | 1.46e-3 | 0.9511 (1.2e-3) | — | — |
 | 50 | 0.9800 | 5.97e-4 | 2.48e-3 | 0.9810 (1.1e-3) | — | — |
+
+(Ha=2 has a MUG point but no mhdFoam run; Ha=5 is the full three-way overlap — see
+`cases/hartmann/results/overlay_Ha5.png`. The MUG `u_mean/u_c` relerr is vs analytic at the
+fitted Ha; see §3 for the MUG-internal Ha fit/predict check.)
 
 **mhdFoam vs analytic:** L2 ≤ 1.0e-3, Linf ≤ 2.5e-3, `u_mean/u_c` relerr ~1.1e-3 across the
 whole sweep. The discriminating scalar tracks analytic from near-Poiseuille (Ha=1) to plug-core
@@ -59,14 +65,17 @@ applied field `B_0=(0,0,B0)` (wall-normal, in-plane), `n,T` frozen (incompressib
 |----|----|----|----|----|----|----|
 | 2.002 | 2.244e-3 | 80  | 2.002 | 1.000 | 4.67e-5 | 0.7056 / 0.7056 |
 | 4.995 | 5.60e-3  | 80  | 4.998 | 1.001 | 1.25e-4 | 0.8108 / 0.8109 |
-| 9.99  | 1.122e-2 | 160 | _(see note)_ | _(see note)_ | _(see note)_ | _(see note)_ |
+| 9.99  | 1.122e-2 | 160 | _not finalized_ | — | — | — |
 
 The Hartmann number **fitted from the computed profile shape** matches the **predicted Ha from
 inputs** to ≤0.1% at both Ha=2 and Ha=5, the profiles match analytic to L2 ~1e-4, and `u_mean/u_c`
 matches to ≤1e-4. The fully-developed assumption is verified: `velx` is uniform in x to <1e-6.
 This confirms both the geometry mapping (x–z mesh plane, y out-of-plane; induced `b_x = -dψ/dz`)
-and the scaling `Ha = B0·a/√(μ0·η·ρ·ν)`. (Ha=10 on the finer 160-cell mesh was run to round out
-the sweep; see the overnight log / `cases/hartmann/mug/Ha_10/` for its status.)
+and the scaling `Ha = B0·a/√(μ0·η·ρ·ν)`. **The Ha=10 run** on a finer 160-cell uniform mesh did
+not reach steady state within the run window (the implicit solve stiffens markedly on the finer
+uniform mesh) and was stopped — see §6. The two confirmed points already demonstrate the profile
+match and the linear `Ha`–`B0` scaling; extending to higher Ha is a meshing task (§6), not a
+solver question.
 
 ---
 
@@ -76,7 +85,7 @@ the sweep; see the overnight log / `cases/hartmann/mug/Ha_10/` for its status.)
 |------|--------|-------|
 | A1 analytic Hartmann | ✅ complete | `analytic_hartmann.py` self-test passes (Poiseuille 2/3, plug→1, Q*~1/Ha, exact vs numeric <1e-8). |
 | A3 mhdFoam Hartmann | ✅ complete | Ha∈{1,5,10,20,50}, agreement ~1e-3. |
-| A2 resolved MUG Hartmann | ✅ complete (Ha≤10) | Ha∈{2,5,10}; Ha mapping confirmed to 0.1%. Higher Ha blocked by uniform-mesh resolution (§6). |
+| A2 resolved MUG Hartmann | ✅ complete (Ha≤5) | Ha∈{2,5}; Ha mapping confirmed to 0.1%. Ha=10 attempted but not finalized (slow implicit solve on finer uniform mesh, §6). |
 | B analytic Hunt | see §7 | conducting-wall duct, side jets. |
 | B MUG Hunt | not attempted | Hunt needs a *different* geometry (out-of-plane axial flow `vely(x,z)`, conducting Hartmann-wall EM BC). The Task-A MUG geometry (in-plane channel) does not transfer directly; flagged as next step rather than risk a long debug overnight. |
 
@@ -106,14 +115,19 @@ unchanged from before the body-force change. The new code paths are inert when d
 
 ---
 
-## 6. Why MUG Hartmann is capped at Ha≈10 here
+## 6. Why the resolved-MUG leg stops at Ha≈5 here
 
 The Hartmann layer thickness is ~`a/Ha`. Resolving it with ≥8 cells needs wall-normal spacing
-`≲ a/(8·Ha)`. The 2D MUG cube mesh is **uniform** (no wall-normal grading), so at Ha=50 (layer
-0.02) one would need ~400 uniform cells across the channel — expensive, and the linear solve
-stiffens. mhdFoam used a graded mesh (wall cell ~0.002) to reach Ha=50 cheaply. **Next step for
-MUG:** a wall-normal-graded or boundary-layer-refined 2D mesh, or anisotropic refinement, to push
-the resolved-MUG leg to Ha=20–50. This is a meshing limitation of this exercise, not a solver one.
+`≲ a/(8·Ha)`. The 2D MUG cube mesh is **uniform** (no wall-normal grading), so resolution must be
+added everywhere: Ha=5 is comfortable on 80 cells, but Ha=10 already pushed to 160 uniform cells,
+and the **implicit Newton–Krylov solve stiffens sharply** on the finer uniform mesh — the Ha=10
+run did not reach steady state within the run window and was stopped (no faked result). Ha=50
+(layer 0.02) would need ~400 uniform cells across the channel. mhdFoam, by contrast, used a graded
+mesh (wall cell ~0.002) to reach Ha=50 cheaply. **Next step for MUG:** a wall-normal-graded or
+boundary-layer-refined 2D mesh (or anisotropic refinement) to push the resolved-MUG leg to
+Ha=10–50 without a uniform-mesh blow-up in DOF count and solver cost. This is a meshing/solver-cost
+limitation of *this exercise's setup*, not a statement about the solver's correctness — the two
+confirmed points (Ha=2, 5) already match analytic to ~1e-4 with the Ha mapping verified to 0.1%.
 
 ---
 
