@@ -1,0 +1,18 @@
+# OpenFOAM run directories (large mesh/field/VTK output) — keep template + results only
+hartmann/openfoam/Ha_*/
+hartmann/openfoam/template/*/[0-9]*/
+**/VTK/
+**/postProcessing/
+**/processor*/
+**/*.OpenFOAM
+**/log.*
+**/foamToVTK.log
+# Python caches
+**/__pycache__/
+*.pyc
+# MUG run scratch
+hartmann/mug/*.profile
+hartmann/mug/oft.in
+hartmann/mug/*.rst
+hartmann/mug/*.hist
+**/xmhd_2d*

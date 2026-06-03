@@ -94,6 +94,12 @@ TYPE, public :: oft_xmhd_2d_sim
   LOGICAL :: use_wall_drag = .FALSE. !< Enable reduced wall/Hartmann drag source term
   REAL(r8) :: drag_coeff = 0.d0 !< Drag coefficient alpha [1/time in problem units]
   REAL(r8) :: drag_bhat(3) = [0.d0,1.d0,0.d0] !< Unit vector along applied-field direction; drag is NOT applied along this direction
+  !--- Uniform body-force (per unit mass) momentum source, default off.
+  !    Used to drive fully-developed channel/duct flow (e.g. Hartmann verification).
+  !    Adds S_u = body_force to the momentum equation (acceleration units, like the
+  !    pressure-gradient and viscous terms). Constant => no Jacobian contribution.
+  LOGICAL :: use_body_force = .FALSE. !< Enable uniform body-force momentum source
+  REAL(r8) :: body_force(3) = [0.d0,0.d0,0.d0] !< Body force per unit mass [accel units]
   LOGICAL, CONTIGUOUS, POINTER, DIMENSION(:) :: n_bc => NULL() !< n BC flag
   LOGICAL, CONTIGUOUS, POINTER, DIMENSION(:) :: velx_bc => NULL() !< vel BC flag
   LOGICAL, CONTIGUOUS, POINTER, DIMENSION(:) :: vely_bc => NULL() !< vel BC flag
@@ -169,6 +175,17 @@ current_sim=>self
 ! Set boundary conditions not alreadys set
 !---------------------------------------------------------------------------
 CALL self%setup_bc()
+!---------------------------------------------------------------------------
+! Normalize wall-drag field direction (drag projects out the component of
+! velocity perpendicular to drag_bhat, so drag_bhat must be a unit vector).
+!---------------------------------------------------------------------------
+IF(self%use_wall_drag)THEN
+  IF(NORM2(self%drag_bhat)<=1.d-12)THEN
+    CALL oft_abort('use_wall_drag=.TRUE. but drag_bhat is a zero vector', &
+      'run_simulation',__FILE__)
+  END IF
+  self%drag_bhat=self%drag_bhat/NORM2(self%drag_bhat)
+END IF
 !---------------------------------------------------------------------------
 ! Create solver fields
 !---------------------------------------------------------------------------
@@ -376,6 +393,17 @@ current_sim=>self
 ! Set boundary conditions not alreadys set
 !---------------------------------------------------------------------------
 CALL self%setup_bc()
+!---------------------------------------------------------------------------
+! Normalize wall-drag field direction (drag projects out the component of
+! velocity perpendicular to drag_bhat, so drag_bhat must be a unit vector).
+!---------------------------------------------------------------------------
+IF(self%use_wall_drag)THEN
+  IF(NORM2(self%drag_bhat)<=1.d-12)THEN
+    CALL oft_abort('use_wall_drag=.TRUE. but drag_bhat is a zero vector', &
+      'run_simulation',__FILE__)
+  END IF
+  self%drag_bhat=self%drag_bhat/NORM2(self%drag_bhat)
+END IF
 !---------------------------------------------------------------------------
 ! Create solver fields
 !---------------------------------------------------------------------------
@@ -730,6 +758,8 @@ REAL(r8) :: m_i=proton_mass
 REAL(r8) :: chi, eta, nu, D_diff, gamma, diag_vals(5), B_0(3), diag_vec(3)
 LOGICAL :: use_wall_drag
 REAL(r8) :: drag_coeff, drag_bhat(3)
+LOGICAL :: use_body_force
+REAL(r8) :: body_force(3)
 REAL(r8), POINTER, DIMENSION(:) :: n_weights,T_weights,psi_weights,by_weights, T_res, &
                               n_res, psi_res, by_res, vtmp, velx_res, vely_res, velz_res
 REAL(r8), POINTER, DIMENSION(:,:) :: vel_weights
@@ -762,6 +792,8 @@ cyl_flag = self%parent_sim%cyl_flag
 use_wall_drag = self%parent_sim%use_wall_drag
 drag_coeff    = self%parent_sim%drag_coeff
 drag_bhat     = self%parent_sim%drag_bhat
+use_body_force = self%parent_sim%use_body_force
+body_force     = self%parent_sim%body_force
 
 !---Zero result and get storage array
 CALL b%set(0.d0)
@@ -929,6 +961,20 @@ DO i=1,mesh%nc
           ELSE
             res_loc(jr,k+1) = res_loc(jr,k+1) &
               + drag_coeff*self%dt*basis_vals(jr)*(vel(k)-vdotb_drag*drag_bhat(k))*int_factor
+          END IF
+        END DO
+      END IF
+      !---Uniform body-force momentum source: S_u = body_force (per unit mass).
+      ! Same sign convention as the pressure-gradient term: a positive RHS force
+      ! appears as -dt*phi*f in the residual F(u)=F_old. Constant => no Jacobian term.
+      IF(use_body_force) THEN
+        DO k=1,3
+          IF (cyl_flag) THEN
+            res_loc(jr,k+1) = res_loc(jr,k+1) &
+              - self%dt*basis_vals(jr)*body_force(k)*int_factor*coords(1)
+          ELSE
+            res_loc(jr,k+1) = res_loc(jr,k+1) &
+              - self%dt*basis_vals(jr)*body_force(k)*int_factor
           END IF
         END DO
       END IF

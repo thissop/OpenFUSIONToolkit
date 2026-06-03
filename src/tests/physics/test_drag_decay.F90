@@ -40,7 +40,7 @@ USE xmhd_2d
 IMPLICIT NONE
 
 INTEGER(i4) :: io_unit, ierr
-REAL(r8), POINTER :: vec_vals(:)
+REAL(r8), POINTER :: vec_vals(:) => NULL()
 
 !---Runtime options (read from namelist)
 INTEGER(i4) :: order    = 2
@@ -100,6 +100,11 @@ mhd_sim%den_scale = den_scale
 mhd_sim%lin_tol   = lin_tol
 mhd_sim%nl_tol    = nl_tol
 mhd_sim%mfnk      = .FALSE.
+!---Pin the timestep: a large ittarget makes the adaptive controller cap dt at
+!   its initial value every step (see run_simulation: dt = ittarget*Sum(dt)/Sum(lits),
+!   then capped at dtin). A fixed dt is required for the analytic backward-Euler
+!   decay prediction velx0/(1+alpha*dt)^nsteps to be exact, independent of FE order.
+mhd_sim%ittarget  = 1000000
 
 !---Enable wall drag perpendicular to y (bhat=[0,1,0])
 !   velx and velz are damped; vely is not.

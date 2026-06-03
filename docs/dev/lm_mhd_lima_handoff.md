@@ -154,9 +154,9 @@ Crank-Nicolson.
 
 ### Important caveats / TODOs
 
-- **`drag_bhat` is NOT normalized by the code.** The user must supply a unit vector.
-  If `|drag_bhat| ≠ 1`, the drag is not a true perpendicular projection. This is
-  a TODO: add normalization or an assertion.
+- ~~**`drag_bhat` is NOT normalized by the code.**~~ **RESOLVED 2026-06-02.** `drag_bhat`
+  is now normalized once in `run_simulation`/`run_lin_simulation` (with a zero-vector abort).
+  Users may supply any non-zero vector; see §6 fix 1.
 - Drag is currently applied uniformly over the entire domain. A per-region drag
   (applying only in the liquid-metal region, not the plasma region) is future work.
 - No input namelist parsing is added for the drag parameters. The user must set them
@@ -257,32 +257,107 @@ Lines 117-119: test_drag_p3_r1() — alpha=2, order=3
 
 ---
 
-## 6. Build/Test Status
+## 6. Build/Test Status — ✅ COMPLETED (2026-06-02, Lima Ubuntu)
 
-**Full build: NOT completed.** No CMake build directory exists in the macOS
-environment. A `gfortran -fsyntax-only` run confirmed the usual
-`Cannot open module file 'oft_base.mod'` error that is expected without the
-full OFT build — this is not a code-level error.
+**Build: COMPLETED successfully.** Full CMake build in a Linux (Lima) environment.
 
-**Tests: NOT run.** No binaries exist. Do not claim validation until:
-1. `cmake` configures successfully
-2. `make` (or `ninja`) completes
-3. All three existing 2D tests pass
-4. New drag decay test passes
+**Environment:**
+- OS: Ubuntu 25.10, aarch64
+- Compilers: gcc/g++/gfortran 15.2.0
+- CMake 3.31.6, Python 3.13 (venv at `oft_venv/`)
+- External libs built from source via `build_libs.py`: MPICH 4.2.3, HDF5 1.14.6,
+  OpenBLAS 0.3.30, METIS 5.1.0, SuperLU 7.0.0, UMFPACK 6.3.5, ARPACK-ng 3.9.1, libxml2 2.15.2
+- LA backend: native; OpenMP on (6 threads)
 
-**Expected passing tests after build:**
+**Exact build commands used:**
+```bash
+# Prerequisites (Ubuntu apt)
+sudo apt-get install -y python3-venv python3-dev build-essential m4 autoconf automake libtool
 
-| Test | Purpose | Status |
+# Python venv + deps
+python3 -m venv oft_venv
+echo "source $(pwd)/oft_venv/bin/activate" > setup_env.sh
+source setup_env.sh
+python -m pip install pytest numpy scipy h5py matplotlib xarray
+
+# Stage 1: external libraries (~20 min, mirrors CI copilot-setup-steps.yml)
+mkdir -p builds && cd builds
+export CC=gcc CXX=g++ FC=gfortran
+python ../src/utilities/build_libs.py --build_umfpack=1 --build_superlu=1 \
+  --no_dl_progress --nthread=6 --build_arpack=1 --oft_build_tests=1 --build_mpich=1
+
+# Stage 2: configure + build OFT
+bash config_cmake.sh                 # generates + runs cmake into builds/build_release
+cd build_release && make -j6         # NOTE: source the venv with an ABSOLUTE path first;
+                                     # a relative `source setup_env.sh` fails in a fresh shell
+
+# Run tests
+cd tests/physics
+python -m pytest test_alfven_2d.py test_sound_2d.py test_drag_decay.py -v
+```
+
+**Test results — ALL PASS:**
+
+| Test | Purpose | Result |
 |------|---------|--------|
-| `test_alfven_2d` | Alfvén wave round-trip accuracy | Should pass — drag is default-off |
-| `test_sound_2d` | Compressible sound wave accuracy | Should pass — drag is default-off |
-| `test_drag_decay` | Backward-Euler drag decay rate | Not yet run |
+| `test_alfven_2d` | Alfvén wave round-trip accuracy (drag default-off) | 9 passed |
+| `test_sound_2d` | Compressible sound wave accuracy (drag default-off) | 9 passed |
+| `test_drag_decay` | Backward-Euler drag decay rate (3 cases) | 3 passed |
+| **Full suite** | `test_alfven_2d + test_sound_2d + test_drag_decay` | **21 passed, 36 skipped** |
 
-**Expected `test_drag_decay` behavior:**
-- `velx` decays at rate `1/(1+alpha*dt)^nsteps` — should match to ~1% for well-resolved
-  backward-Euler steps (alpha*dt ≪ 1 for stability)
-- `vely` should be essentially unchanged (< 1e-6 relative error)
-- If NL solver fails to converge, first check `nl_tol` and `lin_tol` in the test input template
+(36 skips are MPI/coverage parametrizations, not failures.)
+
+**`test_drag_decay` measured values:**
+
+| Case | order | α | velx rel err (⊥, damped) | vely rel err (∥, undamped) |
+|------|-------|---|--------------------------|-----------------------------|
+| p2, α=2 | 2 | 2.0 | 3.52e-5 | 4.44e-16 |
+| p2, α=5 | 2 | 5.0 | 3.42e-5 | 4.44e-16 |
+| p3, α=2 | 3 | 2.0 | 5.17e-5 | 5.33e-13 |
+
+All within tolerance (velx < 2%, vely < 1e-6). Perpendicular decay matches the
+backward-Euler analytic rate; parallel component undamped to machine precision.
+
+### Fixes made during build/test (2026-06-02)
+
+1. **`drag_bhat` normalization (handoff §8 item 5, §11 known gap).** Added a one-time
+   normalization with a zero-vector abort guard in both `run_simulation` and
+   `run_lin_simulation` (`xmhd_2d.F90`, just after `CALL self%setup_bc()`):
+   ```fortran
+   IF(self%use_wall_drag)THEN
+     IF(NORM2(self%drag_bhat)<=1.d-12)THEN
+       CALL oft_abort('use_wall_drag=.TRUE. but drag_bhat is a zero vector', &
+         'run_simulation',__FILE__)
+     END IF
+     self%drag_bhat=self%drag_bhat/NORM2(self%drag_bhat)
+   END IF
+   ```
+   Users may now supply a non-unit `drag_bhat`; the perpendicular projection stays correct.
+
+2. **Test segfault fix (`test_drag_decay.F90`).** `vec_vals` was declared
+   `REAL(r8), POINTER :: vec_vals(:)` without `=> NULL()`. `vec_get_local` allocates only
+   when `.NOT.ASSOCIATED(array)`, so the undefined pointer association caused a dangling-read
+   SIGSEGV inside `vec_restore_local` on the first IC assignment. Fixed by initializing the
+   pointer: `REAL(r8), POINTER :: vec_vals(:) => NULL()`. (Pure test-harness bug; no physics change.)
+
+3. **Test timestep pinning (`test_drag_decay.F90`).** The order-3 case failed at 10.25%
+   velx error because the adaptive timestep controller (`ittarget=40` default,
+   `dt = ittarget·Σdt/Σlits` capped at `dt_initial`) shrank dt below 0.05 when the linear
+   iteration count rose at higher FE order — so the constant-dt analytic prediction no longer
+   held. Fixed by setting `mhd_sim%ittarget = 1000000`, which makes the controller cap dt at
+   its initial value every step. p3 error dropped 10.25% → 5.17e-5. (Test-only change; the
+   drag physics was always correct.)
+
+**Files modified this session (uncommitted):**
+- `src/physics/xmhd_2d.F90` — drag_bhat normalization (fix 1)
+- `src/tests/physics/test_drag_decay.F90` — fixes 2 and 3
+
+### Harris sheet example
+
+`src/examples/MUG/harris_sheet/` (added by commit 5faae9a) exists but was **not built**:
+the config used `-DOFT_BUILD_EXAMPLES:BOOL=FALSE`. It is a longer nonlinear tearing-mode run
+and is not required for Phase 1 drag validation. To run it, reconfigure with
+`OFT_BUILD_EXAMPLES=ON` (note `config_cmake.sh` wipes `build_release` on rerun).
 
 ---
 
@@ -440,6 +515,15 @@ ninja -j$(nproc)
 
 ## 9. OpenFOAM / FreeMHD Validation Plan
 
+> **A detailed, runnable cross-validation plan now lives in
+> [`lm_mhd_openfoam_validation.md`](lm_mhd_openfoam_validation.md)** — including the
+> analytic Hartmann reference, exact apt/`mhdFoam` install + run commands, the `Ha` sweep,
+> and (importantly) an honest framing of what the reduced-drag model can and cannot be
+> compared against (bulk damping yes; resolved `cosh` boundary-layer profile no).
+> OpenFOAM was confirmed installable via the Ubuntu `openfoam` apt package but was **not
+> installed/run this session** — the primary OFT Phase 1 goal (build + tests) is complete.
+> The summary below is retained for context.
+
 **Goal:** Use external MHD codes as cross-checks for LM-MHD-type behavior,
 starting simple and escalating only if time allows.
 
@@ -500,7 +584,7 @@ When writing to Sophia / Chris / advisor, the following careful phrasing is appr
 - "I implemented an optional default-off reduced Hartmann/wall-drag source term in the standalone 2D OFT/MUG solver (`xmhd_2d.F90`)."
 - "The term damps velocity perpendicular to a user-specified applied-field direction, modeling Hartmann-layer friction without resolving the thin wall layer on the mesh."
 - "I included the corresponding Jacobian contribution, consistent with the backward-Euler implicit time-stepping used by the existing solver."
-- "I added a drag-decay validation test comparing the numerical solution against the backward-Euler analytic prediction. The full build and runtime test is pending (needs a Linux environment)."
+- "I added a drag-decay validation test comparing the numerical solution against the backward-Euler analytic prediction. It was built and run on Linux (Ubuntu/gfortran 15.2, MPICH): the perpendicular component decays at the analytic backward-Euler rate (rel. err ~5e-5 at FE orders 2 and 3) and the parallel component is undamped to machine precision. The existing 2D Alfvén and sound-wave tests still pass unchanged with drag default-off (21 passed, 36 skipped overall)."
 - "This validates only the reduced drag model. It does not claim incompressible MHD, anisotropic conductivity, current-closure wall BCs, or full LM blanket validity."
 - "The larger incompressible LM-MHD formulation described in the TOFE abstract should be developed as a separate module (`xmhd_2d_lm.F90`) rather than added to the compressible solver, to avoid compromising plasma-MHD use cases."
 - "Next physics additions in order of risk and value: (1) region-specific material coefficients, (2) anisotropic conductivity tensor, (3) incompressible pressure-velocity formulation, (4) wall current-closure BCs, (5) bidirectional TokaMaker coupling."
@@ -511,12 +595,12 @@ When writing to Sophia / Chris / advisor, the following careful phrasing is appr
 
 | Risk | Severity | Status |
 |------|----------|--------|
-| Sign convention in residual | High | Not runtime-tested yet; verify via drag_decay test |
-| `drag_bhat` not normalized | Medium | **Known gap** — add normalization or abort |
-| Cylindrical velocity component treatment | Medium | Code written; not tested |
-| Jacobian matches residual exactly | High | Derivation is correct; runtime test needed |
-| OMP `private(vdotb_drag)` is correct | Medium | Added to private clause; verify with OMP |
-| Default-off leaves existing tests unchanged | High | IF guard exists; verify by running alfven/sound tests |
+| Sign convention in residual | High | ✅ RESOLVED — drag_decay test passes (velx 3.5e-5) |
+| `drag_bhat` not normalized | Medium | ✅ RESOLVED — normalization + abort added (§6 fix 1) |
+| Cylindrical velocity component treatment | Medium | Code written; Cartesian path tested. Cyl path NOT yet exercised by a test — still open |
+| Jacobian matches residual exactly | High | ✅ RESOLVED — NK solver converges; drag_decay passes at p2 and p3 |
+| OMP `private(vdotb_drag)` is correct | Medium | ✅ RESOLVED — ran with 6 OpenMP threads, results correct |
+| Default-off leaves existing tests unchanged | High | ✅ RESOLVED — alfven_2d (9) + sound_2d (9) pass against drag build |
 | No input parser exposes drag options | Low | Programmatic setting is consistent with existing style |
 | `velx` vs `vely` direction in test | Medium | Confirm `vec_vals(1)` is a meaningful representative DOF for uniform field |
 | `alpha_drag * dt` must be not too large | Low | `alpha=2, dt=0.05 → alpha*dt=0.1` — should be fine for BE stability |

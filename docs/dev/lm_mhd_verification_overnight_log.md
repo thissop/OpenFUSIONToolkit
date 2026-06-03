@@ -1,0 +1,16 @@
+# LM-MHD Verification — Overnight Run Log
+
+Timestamped running log. Append-only. All times UTC.
+
+- 2026-06-03T03:36:07Z  RUN START. branch=lm-mhd-upgrades HEAD=713a9a3
+- 2026-06-03T03:36:07Z  Override noted: user authorized LOCAL commits (no push); CLAUDE.MD 'do not commit' is superseded for this run.
+- 2026-06-03T03:36:07Z  Created cases/hartmann/{mug,openfoam,results}, cases/hunt/results.
+- 2026-06-03T03:38:23Z  Task A rung1 (analytic): cases/hartmann/analytic_hartmann.py written + self-test PASS (Poiseuille u_mean/u_c=2/3, plug-core->1, Q*~1/Ha, exact-vs-numeric rel<1e-8). Noted prompt wording vs exact eq.(4) in module docstring.
+- 2026-06-03T03:38:23Z  Task A rung3 (mhdFoam): OpenFOAM installed via apt. mhdFoam at /usr/bin/mhdFoam; env /usr/share/openfoam/etc/bashrc.
+- 2026-06-03T03:47:05Z  Task A rung3 setup: mhdFoam hartmann tutorial (v1912) found & adapted. Fixed sha1/includeFunc error (removed components(U) funcObj; sample U vector directly). Added symmetric wall-normal grading (100x80, wall cell ~0.002 -> resolves layer to Ha=50). Ha=20 probe ran clean (div(B)~1e-10, stable). Full t=40 run launched.
+- 2026-06-03T03:47:05Z  Task A rung2 (MUG) feasibility: NO native body-force/pressure-grad term in xmhd_2d.F90 (only EOS dp + Lorentz). B_0 settable; x-z poloidal plane, y out-of-plane; (v x B_0) induction coupling present => Hartmann mechanism representable. BUT solver is COMPRESSIBLE in physical units => clean Ha + low-Mach mapping is the risk. Plan: finish analytic+mhdFoam headline first, then time-boxed MUG attempt via default-off body-force fallback.
+- 2026-06-03T03:50:51Z  MUG geometry resolved: mesh plane = x-z (lines 644-645 map mesh-grad to x,z; grad_y=0), y out-of-plane invariant. B_pol=grad(psi) x yhat => psi(z) gives induced streamwise b_x=-dpsi/dz. Hartmann maps: velx(z) streamwise, walls z=+/-a, B_0=(0,0,B0), Ha=B0*a/sqrt(mu0*eta*rho*nu). MUG rung is physically representable; needs default-off body-force term + driver + low-Mach Ha mapping. Will attempt after Task A headline (mhdFoam) confirmed.
+- 2026-06-03T03:55:23Z  Task A HEADLINE RESULT (partial): Ha=20 mhdFoam vs analytic @t=10 -> L2=5.8e-4, Linf=1.5e-3, u_mean/u_c relerr=1.2e-3. Converged fast. Sampling functionObject is BROKEN in this OF v1912 ('sha1' IOstream err, also on local disk) -> worked around via foamToVTK + meshio cell-centroid extraction (cases/hartmann/extract_profile.py). Capped all runs endTime=18 (converged by 10).
+- 2026-06-03T03:58:39Z  Task A rung1+3 COMPLETE: analytic vs mhdFoam three-decimal agreement across Ha={1,5,10,20,50}. mhdFoam L2<=1.0e-3, Linf<=2.5e-3, u_mean/u_c relerr~1.1e-3. u_mean/u_c sweeps 0.677->0.980 (Poiseuille->plug), matches analytic. Plots+CSVs+error_table.md in cases/hartmann/results/.
+- 2026-06-03T03:58:39Z  NOTE: Ha=1 mhdFoam crashed at t=10 due to a RACE between live foamDictionary endTime edit and runTimeModifiable re-read (controlDict EOF). t=10 data was already written and is converged (L2=1.0e-3); used it. Lesson: do not edit controlDict of a running runTimeModifiable case.
+- 2026-06-03T03:58:39Z  Added default-off body-force momentum source to xmhd_2d.F90 (use_body_force, body_force(3)); physics lib + tests rebuilt clean.

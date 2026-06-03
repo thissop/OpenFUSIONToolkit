@@ -7,7 +7,7 @@
 
 ## Implemented and Tested (Phase 1)
 
-### Test 1: Drag decay (`test_drag_decay`)
+### Test 1: Drag decay (`test_drag_decay`) — ✅ PASSING (verified 2026-06-02)
 
 **Purpose:** Verify that the reduced Hartmann/wall drag source term decays velocity
 at the correct backward-Euler rate.
@@ -18,6 +18,8 @@ at the correct backward-Euler rate.
 - Physics: near-zero η, ν, χ, D → drag term dominates
 - drag_bhat = [0,1,0] (y/toroidal direction)
 - Natural (free-slip) velocity BCs; Dirichlet-fixed n and T
+- Timestep pinned via large `ittarget` so the adaptive controller holds dt = dt_initial
+  (required for the constant-dt analytic prediction to hold at any FE order)
 
 **Expected:**
 - velx decays: `velx(n) = velx0 / (1 + α·dt)^n`  
@@ -27,9 +29,28 @@ at the correct backward-Euler rate.
 - velx relative error vs backward-Euler: < 2%
 - vely relative error: < 1e-6
 
+**Measured results (Ubuntu 25.10 aarch64, gfortran 15.2.0, MPICH 4.2.3, native LA backend):**
+
+| Case | FE order | α | dt | nsteps | velx rel. err (⊥, damped) | vely rel. err (∥, undamped) | Result |
+|------|----------|---|----|--------|---------------------------|------------------------------|--------|
+| `test_drag_p2_r1` | 2 | 2.0 | 0.05 | 10 | 3.52e-5 | 4.44e-16 | PASS |
+| `test_drag_p2_r1_high_alpha` | 2 | 5.0 | 0.05 | 10 | 3.42e-5 | 4.44e-16 | PASS |
+| `test_drag_p3_r1` | 3 | 2.0 | 0.05 | 10 | 5.17e-5 | 5.33e-13 | PASS |
+
+The perpendicular component decays at the backward-Euler rate to ~5e-5 (limited by the
+nonlinear solve tolerance, not the drag model); the parallel component is undamped to
+machine precision, confirming the perpendicular projection `u - (u·b̂)b̂` is correct.
+
 **Files:**
 - `src/tests/physics/test_drag_decay.F90`
 - `src/tests/physics/test_drag_decay.py`
+
+### Test 2 (regression): existing 2D MUG tests with drag default-off — ✅ PASSING
+
+`test_alfven_2d` (9 passed) and `test_sound_2d` (9 passed) were run against the
+drag-enabled build. Because `use_wall_drag=.FALSE.` is the default and these tests do
+not set it, results are unchanged — confirming the new code path is inert when disabled.
+Full suite: **21 passed, 36 skipped** (skips are MPI/coverage parametrizations).
 
 ---
 

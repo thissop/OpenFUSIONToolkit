@@ -29,6 +29,8 @@ if( OFT_BUILD_TESTS )
   # LM-MHD upgrade: wall / Hartmann drag decay regression test
   oft_add_test( test_drag_decay.F90 )
   configure_file( test_drag_decay.py ${CMAKE_CURRENT_BINARY_DIR} COPYONLY )
+  # LM-MHD verification: driven resolved Hartmann channel (manual driver, drag OFF)
+  oft_add_test( test_hartmann_mug.F90 )
 
   # ThinCurr tests
   configure_file( test_ThinCurr.py ${CMAKE_CURRENT_BINARY_DIR} COPYONLY )
