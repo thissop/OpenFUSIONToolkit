@@ -161,3 +161,23 @@ The next best non-invasive target is now variable-conductivity inductionless
 MMS: `div(sigma grad phi) = div(sigma u x B)` with smooth or two-region
 `sigma(x,z)`, current-continuity checks, and no Fortran edits until that
 reference is solid.
+
+## Additional Continuation Update
+
+The smooth variable-conductivity reference was implemented as
+`cases/lm_mhd_coupling/inductionless_variable_sigma_mms.py`. It solves
+`div(sigma grad(phi)) = source` with
+`sigma = 1 + 0.3 x + 0.2 z`, Dirichlet walls, and an analytic MMS source.
+
+Default convergence:
+
+| n | max error | observed order |
+|---:|---:|---:|
+| 17 | `3.216e-3` | |
+| 25 | `1.428e-3` | `2.003` |
+| 33 | `8.029e-4` | `2.001` |
+| 49 | `3.568e-4` | `2.001` |
+| 65 | `2.007e-4` | `2.000` |
+
+The next best target is now a two-region conductivity-jump MMS with continuity
+of potential and normal current across the interface.

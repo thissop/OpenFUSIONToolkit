@@ -268,6 +268,98 @@ def solve_potential_dirichlet_2d(
     return phi
 
 
+def solve_variable_conductivity_dirichlet_2d(
+    conductivity: np.ndarray,
+    source: np.ndarray,
+    x: np.ndarray,
+    z: np.ndarray,
+    boundary_values: float | np.ndarray = 0.0,
+) -> np.ndarray:
+    '''Solve div(sigma grad(phi)) = source with Dirichlet walls.
+
+    This uniform-grid reference uses arithmetic face averages for sigma. It is
+    meant for manufactured tests of regional/material-coefficient handling, not
+    for production blanket solves.
+    '''
+
+    sigma, xcoord, zcoord = _structured_scalar("conductivity", conductivity, x, z)
+    if np.any(sigma <= 0.0):
+        raise ValueError("conductivity must be positive")
+    src, _, _ = _structured_scalar("source", source, x, z)
+    hx = _uniform_spacing("x", xcoord)
+    hz = _uniform_spacing("z", zcoord)
+    boundary = _boundary_values(boundary_values, src.shape)
+    nz, nx = src.shape
+    nxi = nx - 2
+    nzi = nz - 2
+    if nxi < 1 or nzi < 1:
+        raise ValueError("source grid must include at least one interior point")
+
+    rows = []
+    cols = []
+    data = []
+    rhs = np.empty(nxi * nzi, dtype=np.float64)
+    inv_hx2 = 1.0 / hx**2
+    inv_hz2 = 1.0 / hz**2
+
+    def row_index(iz: int, ix: int) -> int:
+        return iz * nxi + ix
+
+    for iz in range(nzi):
+        for ix in range(nxi):
+            grid_z = iz + 1
+            grid_x = ix + 1
+            row = row_index(iz, ix)
+            sigma_center = sigma[grid_z, grid_x]
+            sigma_e = 0.5 * (sigma_center + sigma[grid_z, grid_x + 1])
+            sigma_w = 0.5 * (sigma_center + sigma[grid_z, grid_x - 1])
+            sigma_n = 0.5 * (sigma_center + sigma[grid_z + 1, grid_x])
+            sigma_s = 0.5 * (sigma_center + sigma[grid_z - 1, grid_x])
+
+            rows.append(row)
+            cols.append(row)
+            data.append(-(sigma_e + sigma_w) * inv_hx2 - (sigma_n + sigma_s) * inv_hz2)
+            value = src[grid_z, grid_x]
+
+            west_coeff = sigma_w * inv_hx2
+            east_coeff = sigma_e * inv_hx2
+            south_coeff = sigma_s * inv_hz2
+            north_coeff = sigma_n * inv_hz2
+
+            if ix > 0:
+                rows.append(row)
+                cols.append(row_index(iz, ix - 1))
+                data.append(west_coeff)
+            else:
+                value -= west_coeff * boundary[grid_z, 0]
+            if ix < nxi - 1:
+                rows.append(row)
+                cols.append(row_index(iz, ix + 1))
+                data.append(east_coeff)
+            else:
+                value -= east_coeff * boundary[grid_z, -1]
+
+            if iz > 0:
+                rows.append(row)
+                cols.append(row_index(iz - 1, ix))
+                data.append(south_coeff)
+            else:
+                value -= south_coeff * boundary[0, grid_x]
+            if iz < nzi - 1:
+                rows.append(row)
+                cols.append(row_index(iz + 1, ix))
+                data.append(north_coeff)
+            else:
+                value -= north_coeff * boundary[-1, grid_x]
+            rhs[row] = value
+
+    matrix = sp.csr_matrix((data, (rows, cols)), shape=(nxi * nzi, nxi * nzi))
+    interior = spla.spsolve(matrix, rhs)
+    phi = boundary.copy()
+    phi[1:-1, 1:-1] = interior.reshape(nzi, nxi)
+    return phi
+
+
 def solve_potential_neumann_2d(
     source: np.ndarray,
     x: np.ndarray,

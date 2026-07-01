@@ -69,6 +69,10 @@ Generated artifacts in `cases/lm_mhd_coupling/results/`:
 - `inductionless_full_mms_current.png`
 - `inductionless_full_mms_midplane.png`
 - `inductionless_full_mms_summary.md`
+- `inductionless_variable_sigma_mms_metrics.csv`
+- `inductionless_variable_sigma_mms_solution.png`
+- `inductionless_variable_sigma_mms_convergence.png`
+- `inductionless_variable_sigma_mms_summary.md`
 
 Headline metrics from the default run:
 
@@ -189,6 +193,36 @@ constant-conductivity inductionless implementation. It still does not include
 variable conductivity, material interfaces, conducting-wall Robin closure, or a
 finite-element weak form.
 
+## Smooth variable-conductivity reference
+
+The diagnostic `cases/lm_mhd_coupling/inductionless_variable_sigma_mms.py`
+verifies coefficient handling for
+
+```text
+div(sigma grad(phi)) = source
+```
+
+with
+
+```text
+sigma = 1 + 0.3 x + 0.2 z
+phi = sin(pi x) sin(pi z)
+```
+
+and analytic `source = div(sigma grad(phi))`. It uses Dirichlet walls to isolate
+the coefficient operator before combining variable conductivity with Neumann
+current closure.
+
+Observed max-error convergence:
+
+| n | h | max error | observed order |
+|---:|---:|---:|---:|
+| 17 | `6.250e-2` | `3.216e-3` | |
+| 25 | `4.167e-2` | `1.428e-3` | `2.003` |
+| 33 | `3.125e-2` | `8.029e-4` | `2.001` |
+| 49 | `2.083e-2` | `3.568e-4` | `2.001` |
+| 65 | `1.562e-2` | `2.007e-4` | `2.000` |
+
 ## Why this matters
 
 The roadmap correctly identifies inductionless electric-potential MHD as the
@@ -208,6 +242,8 @@ current diagnostics, Lorentz force, and Joule dissipation.
 - The constant-conductivity `u x B` MMS has no material jumps, conductivity
   tensors, conducting-wall Robin condition, or current continuity across
   regions.
+- The variable-conductivity MMS is smooth and Dirichlet-only; it does not yet
+  test discontinuous material interfaces or Neumann current closure.
 - The MMS current is manufactured and is not a resolved Hartmann, Shercliff, or
   Hunt flow.
 - The structured-grid divergence diagnostic is for reference/postprocessing; it
@@ -215,8 +251,7 @@ current diagnostics, Lorentz force, and Joule dissipation.
 
 ## Next step
 
-The next non-invasive reference step should be a variable-conductivity MMS for
-`div(sigma grad phi) = div(sigma u x B)`, including either smooth
-`sigma(x,z)` or a two-region jump with current-continuity checks. That would
-exercise the part of the eventual finite-element mode most likely to matter for
-multi-material blankets while still avoiding risky Fortran edits.
+The next non-invasive reference step should be a two-region conductivity-jump
+MMS with continuity of potential and normal current across the interface. That
+would exercise the part of the eventual finite-element mode most likely to
+matter for multi-material blankets while still avoiding risky Fortran edits.

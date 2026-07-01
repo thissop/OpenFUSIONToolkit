@@ -57,6 +57,7 @@ from .inductionless import (
     reconstruct_inductionless_current_2d,
     solve_potential_dirichlet_2d,
     solve_potential_neumann_2d,
+    solve_variable_conductivity_dirichlet_2d,
     structured_gradient_2d,
     wall_normal_current_extrema,
 )
@@ -109,6 +110,7 @@ __all__ = [
     "reconstruct_inductionless_current_2d",
     "solve_potential_dirichlet_2d",
     "solve_potential_neumann_2d",
+    "solve_variable_conductivity_dirichlet_2d",
     "structured_gradient_2d",
     "wall_normal_current_extrema",
 ]

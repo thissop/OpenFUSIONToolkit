@@ -14,6 +14,7 @@ try:
         reconstruct_inductionless_current_2d,
         solve_potential_dirichlet_2d,
         solve_potential_neumann_2d,
+        solve_variable_conductivity_dirichlet_2d,
         structured_gradient_2d,
         wall_normal_current_extrema,
     )
@@ -42,6 +43,7 @@ except FileNotFoundError:
     reconstruct_inductionless_current_2d = inductionless.reconstruct_inductionless_current_2d
     solve_potential_dirichlet_2d = inductionless.solve_potential_dirichlet_2d
     solve_potential_neumann_2d = inductionless.solve_potential_neumann_2d
+    solve_variable_conductivity_dirichlet_2d = inductionless.solve_variable_conductivity_dirichlet_2d
     structured_gradient_2d = inductionless.structured_gradient_2d
     wall_normal_current_extrema = inductionless.wall_normal_current_extrema
 
@@ -209,3 +211,32 @@ def test_full_inductionless_reference_recovers_potential_and_current():
     np.testing.assert_allclose(current, target_current, rtol=0.0, atol=1.0e-9)
     assert np.max(np.abs(residual[2:-2, 2:-2])) < 1.0e-9
     assert max(wall_current.values()) < 1.0e-9
+
+
+def test_variable_conductivity_dirichlet_solver_recovers_smooth_mms():
+    x = np.linspace(0.0, 1.0, 65)
+    z = np.linspace(0.0, 1.0, 63)
+    x_grid, z_grid = np.meshgrid(x, z, indexing="xy")
+    phi_exact = np.sin(np.pi * x_grid) * np.sin(np.pi * z_grid)
+    conductivity = 1.0 + 0.3 * x_grid + 0.2 * z_grid
+    d_phi_dx = np.pi * np.cos(np.pi * x_grid) * np.sin(np.pi * z_grid)
+    d_phi_dz = np.pi * np.sin(np.pi * x_grid) * np.cos(np.pi * z_grid)
+    lap_phi = -2.0 * np.pi**2 * phi_exact
+    source = conductivity * lap_phi + 0.3 * d_phi_dx + 0.2 * d_phi_dz
+
+    phi = solve_variable_conductivity_dirichlet_2d(conductivity, source, x, z, boundary_values=0.0)
+    error = phi - phi_exact
+
+    assert np.max(np.abs(error)) < 3.0e-4
+    assert np.sqrt(np.mean(error**2)) < 1.5e-4
+
+
+def test_variable_conductivity_dirichlet_solver_rejects_nonpositive_sigma():
+    x = np.linspace(0.0, 1.0, 5)
+    z = np.linspace(0.0, 1.0, 5)
+    source = np.zeros((5, 5))
+    conductivity = np.ones((5, 5))
+    conductivity[2, 2] = 0.0
+
+    with pytest.raises(ValueError, match="conductivity"):
+        solve_variable_conductivity_dirichlet_2d(conductivity, source, x, z)
