@@ -16,6 +16,7 @@ from typing import Any
 
 import h5py
 import numpy as np
+from scipy import special
 
 MU0 = 4.0e-7 * np.pi
 SCHEMA_VERSION = "lm_mhd_coupling_snapshot_v0"
@@ -97,6 +98,26 @@ class CouplingSnapshot:
 
         snap = self.validated()
         return snap.current_density[:, 1].copy()
+
+
+@dataclass(frozen=True)
+class FeedbackMetrics:
+    '''Reduced field-feedback metrics from axisymmetric toroidal currents.
+
+    These metrics estimate the magnetic perturbation produced by currents in a
+    `CouplingSnapshot` at user-chosen probe locations. They are triage numbers
+    for deciding whether reverse coupling deserves a real TokaMaker solve, not
+    replacements for that solve.
+    '''
+
+    total_toroidal_current: float
+    absolute_toroidal_current: float
+    current_centroid_rz: tuple[float, float]
+    max_delta_b: float
+    rms_delta_b: float
+    max_feedback: float
+    rms_feedback: float
+    classification: str
 
 
 def representative_liquid_metals() -> dict[str, LiquidMetalProperties]:
@@ -304,6 +325,212 @@ def classify_coupling(
     return "low"
 
 
+def classify_feedback_ratio(
+    ratio: float,
+    feedback_threshold: float = 1.0e-3,
+    strong_threshold: float = 1.0e-2,
+) -> str:
+    '''Classify reverse magnetic feedback from max |delta B|/|B_ref|.
+
+    The thresholds are planning conventions. Crossing them is a prompt for a
+    coupled sensitivity calculation, not a claim that the plasma equilibrium
+    will move by the same fraction.
+    '''
+
+    _require_nonnegative("ratio", ratio)
+    _require_positive("feedback_threshold", feedback_threshold)
+    _require_positive("strong_threshold", strong_threshold)
+    if strong_threshold <= feedback_threshold:
+        raise ValueError("strong_threshold must exceed feedback_threshold")
+    if ratio >= strong_threshold:
+        return "strong-two-way-candidate"
+    if ratio >= feedback_threshold:
+        return "two-way-candidate"
+    return "weak-feedback"
+
+
+def axisymmetric_area_weights(snapshot: CouplingSnapshot) -> np.ndarray:
+    '''Return poloidal-area weights from axisymmetric cell volumes.
+
+    If `cell_volume` stores a toroidal volume for an axisymmetric cell, the
+    corresponding poloidal cross-section area is dA = dV / (2 pi R). That dA is
+    the weight needed to integrate toroidal current density, I = integral J_phi
+    dA, for circular-loop field estimates.
+    '''
+
+    snap = snapshot.validated()
+    if snap.cell_volume is None:
+        raise ValueError("snapshot.cell_volume is required for axisymmetric area weights")
+    radius = snap.points_rz[:, 0]
+    if np.any(radius <= 0.0):
+        raise ValueError("points_rz[:, 0] must be positive for axisymmetric area weights")
+    return snap.cell_volume / (2.0 * np.pi * radius)
+
+
+def integrated_toroidal_current(
+    snapshot: CouplingSnapshot,
+    area_weights: np.ndarray | None = None,
+    absolute: bool = False,
+) -> float:
+    '''Return integral J_phi dA from a snapshot and poloidal-area weights.'''
+
+    snap, weights = _snapshot_and_area_weights(snapshot, area_weights)
+    current_density = snap.toroidal_current_density()
+    if absolute:
+        current_density = np.abs(current_density)
+    return float(np.sum(current_density * weights))
+
+
+def current_centroid_rz(
+    snapshot: CouplingSnapshot,
+    area_weights: np.ndarray | None = None,
+    absolute: bool = True,
+) -> tuple[float, float]:
+    '''Return the J_phi-weighted current centroid in the poloidal plane.'''
+
+    snap, weights = _snapshot_and_area_weights(snapshot, area_weights)
+    current_weights = snap.toroidal_current_density() * weights
+    if absolute:
+        current_weights = np.abs(current_weights)
+    denom = float(np.sum(current_weights))
+    if abs(denom) == 0.0:
+        raise ValueError("current centroid is undefined for zero weighted current")
+    centroid = np.sum(snap.points_rz * current_weights[:, None], axis=0) / denom
+    return float(centroid[0]), float(centroid[1])
+
+
+def circular_loop_poloidal_field(
+    loop_radius: float,
+    loop_z: float,
+    current: float,
+    probe_rz: np.ndarray,
+    mu: float = MU0,
+    regularization: float = 0.0,
+) -> np.ndarray:
+    '''Return (B_R, B_Z) from an axisymmetric circular current loop.
+
+    The expression is the standard Biot-Savart result for a circular loop,
+    written with complete elliptic integrals. `regularization` optionally
+    softens the loop/probe separation for diagnostic plots; it is not a
+    substitute for a finite-element self-field treatment.
+    '''
+
+    _require_positive("loop_radius", loop_radius)
+    _require_finite("loop_z", loop_z)
+    _require_finite("current", current)
+    _require_positive("mu", mu)
+    _require_nonnegative("regularization", regularization)
+    probes = _as_points_rz("probe_rz", probe_rz)
+    radius = probes[:, 0]
+    if np.any(radius < 0.0):
+        raise ValueError("probe_rz[:, 0] must be non-negative")
+
+    zeta = probes[:, 1] - loop_z
+    zeta2 = zeta**2 + regularization**2
+    separation2 = (loop_radius - radius) ** 2 + zeta2
+    if regularization == 0.0 and np.any(separation2 == 0.0):
+        raise ValueError("probe lies on the current loop; use regularization or move the probe")
+
+    beta2 = (loop_radius + radius) ** 2 + zeta2
+    beta = np.sqrt(beta2)
+    m = np.zeros_like(radius)
+    nonzero_beta = beta2 > 0.0
+    m[nonzero_beta] = 4.0 * loop_radius * radius[nonzero_beta] / beta2[nonzero_beta]
+    m = np.clip(m, 0.0, 1.0 - np.finfo(float).eps)
+
+    ellip_k = special.ellipk(m)
+    ellip_e = special.ellipe(m)
+    common = mu * current / (2.0 * np.pi * beta)
+
+    field_z = common * (
+        ellip_k
+        + (loop_radius**2 - radius**2 - zeta2) / separation2 * ellip_e
+    )
+
+    field_r = np.zeros_like(field_z)
+    off_axis = radius > 0.0
+    field_r[off_axis] = (
+        common[off_axis]
+        * zeta[off_axis]
+        / radius[off_axis]
+        * (
+            -ellip_k[off_axis]
+            + (loop_radius**2 + radius[off_axis] ** 2 + zeta2[off_axis])
+            / separation2[off_axis]
+            * ellip_e[off_axis]
+        )
+    )
+    return np.column_stack((field_r, field_z))
+
+
+def axisymmetric_toroidal_current_field(
+    snapshot: CouplingSnapshot,
+    probe_rz: np.ndarray,
+    area_weights: np.ndarray | None = None,
+    mu: float = MU0,
+    regularization: float = 0.0,
+) -> np.ndarray:
+    '''Estimate (B_R, B_Z) at probes from sampled toroidal currents.
+
+    Each sample contributes a circular loop with current dI = J_phi dA. This is
+    a geometry-explicit feedback diagnostic for axisymmetric current snapshots.
+    It is intentionally simple and should be replaced by the TokaMaker Green's
+    function machinery for production coupled-equilibrium work.
+    '''
+
+    snap, weights = _snapshot_and_area_weights(snapshot, area_weights)
+    probes = _as_points_rz("probe_rz", probe_rz)
+    field = np.zeros((probes.shape[0], 2), dtype=np.float64)
+    loop_currents = snap.toroidal_current_density() * weights
+    for (radius, zval), loop_current in zip(snap.points_rz, loop_currents):
+        if loop_current == 0.0:
+            continue
+        if radius <= 0.0:
+            raise ValueError("current-loop radius must be positive")
+        field += circular_loop_poloidal_field(
+            radius,
+            zval,
+            float(loop_current),
+            probes,
+            mu=mu,
+            regularization=regularization,
+        )
+    return field
+
+
+def feedback_metrics_from_snapshot(
+    snapshot: CouplingSnapshot,
+    probe_rz: np.ndarray,
+    reference_field: float,
+    area_weights: np.ndarray | None = None,
+    regularization: float = 0.0,
+) -> FeedbackMetrics:
+    '''Return reduced magnetic-feedback metrics for a current snapshot.'''
+
+    _require_positive("reference_field", abs(reference_field))
+    field = axisymmetric_toroidal_current_field(
+        snapshot,
+        probe_rz,
+        area_weights=area_weights,
+        regularization=regularization,
+    )
+    field_mag = np.linalg.norm(field, axis=1)
+    max_delta_b = float(np.max(field_mag))
+    rms_delta_b = float(np.sqrt(np.mean(field_mag**2)))
+    max_ratio = float(max_delta_b / abs(reference_field))
+    rms_ratio = float(rms_delta_b / abs(reference_field))
+    return FeedbackMetrics(
+        total_toroidal_current=integrated_toroidal_current(snapshot, area_weights=area_weights),
+        absolute_toroidal_current=integrated_toroidal_current(snapshot, area_weights=area_weights, absolute=True),
+        current_centroid_rz=current_centroid_rz(snapshot, area_weights=area_weights, absolute=True),
+        max_delta_b=max_delta_b,
+        rms_delta_b=rms_delta_b,
+        max_feedback=max_ratio,
+        rms_feedback=rms_ratio,
+        classification=classify_feedback_ratio(max_ratio),
+    )
+
+
 def write_coupling_snapshot(filename: str, snapshot: CouplingSnapshot) -> None:
     '''Write a validated current-feedback snapshot to HDF5.'''
 
@@ -360,6 +587,34 @@ def _as_float_array(name: str, values: Any, ndim: int) -> np.ndarray:
     if not np.all(np.isfinite(arr)):
         raise ValueError(f"{name} must contain only finite values")
     return arr
+
+
+def _as_points_rz(name: str, values: Any) -> np.ndarray:
+    arr = _as_float_array(name, values, 2)
+    if arr.shape[1] != 2:
+        raise ValueError(f"{name} must have shape (n, 2)")
+    return arr
+
+
+def _area_weights(values: Any, size: int) -> np.ndarray:
+    weights = _as_float_array("area_weights", values, 1)
+    if weights.shape != (size,):
+        raise ValueError("area_weights must have shape (n,)")
+    if np.any(weights < 0.0):
+        raise ValueError("area_weights entries must be non-negative")
+    return weights
+
+
+def _snapshot_and_area_weights(
+    snapshot: CouplingSnapshot,
+    area_weights: np.ndarray | None,
+) -> tuple[CouplingSnapshot, np.ndarray]:
+    snap = snapshot.validated()
+    if area_weights is None:
+        weights = axisymmetric_area_weights(snap)
+    else:
+        weights = _area_weights(area_weights, snap.points_rz.shape[0])
+    return snap, weights
 
 
 def _require_positive(name: str, value: float) -> None:

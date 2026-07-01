@@ -24,3 +24,5 @@ Timestamped running log. Append-only. All times UTC.
 2026-07-01T15:32:04Z - Added LM_MHD Python triage utilities, HDF5 coupling snapshot schema, source-tree tests, and smplotlib coupling scan; pytest test_lm_mhd_coupling: 6 passed.
 2026-07-01T16:05:52Z - Starting effective-drag closure diagnostics implementation; branch=lm-mhd-upgrades; preserving preexisting dirty Hartmann artifacts and xmhd_2d stub unstaged.
 2026-07-01T16:10:34Z - Effective-drag closure diagnostics implemented: closures.py, test_lm_mhd_closures.py, hartmann_drag_closure_scan.py, saved smplotlib plots/CSV/HDF5, docs/dev/lm_mhd_effective_drag_closure_plan.md. Focused pytest currently 12 passed.
+2026-07-01T16:14:39Z - Started autonomous slice 2: explicit axisymmetric current-feedback metrics and smplotlib diagnostics for two-way LM/plasma coupling triage; no solver-validation claims.
+2026-07-01T16:21:51Z - Axisymmetric feedback diagnostics implemented: circular-loop Biot-Savart helpers, feedback tests, HDF5 roundtrip scan, smplotlib field/scaling plots, and docs/dev/lm_mhd_two_way_feedback_diagnostics.md. Focused pytest currently 19 passed.
