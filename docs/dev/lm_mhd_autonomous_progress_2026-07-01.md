@@ -196,3 +196,24 @@ Default result:
 The next best target is now variable-coefficient Neumann current closure:
 `div(sigma grad phi) = div(sigma u x B)` with insulating `J.n = 0` wall checks
 for spatially varying or regional sigma.
+
+## Variable-Coefficient Neumann Update
+
+The smooth variable-conductivity Neumann-flux reference was implemented as
+`cases/lm_mhd_coupling/inductionless_variable_sigma_neumann_mms.py`. It solves
+`div(sigma grad(phi)) = source` with nonzero prescribed outward wall flux
+`sigma dphi/dn` and a mean-value gauge.
+
+Default convergence:
+
+| n | max error | observed order |
+|---:|---:|---:|
+| 17 | `4.470e-4` | |
+| 25 | `1.989e-4` | `1.997` |
+| 33 | `1.120e-4` | `1.998` |
+| 49 | `4.980e-5` | `1.998` |
+| 65 | `2.802e-5` | `1.999` |
+
+The next best target is now a full variable-conductivity inductionless MMS:
+generate source and wall flux from `sigma (u x B)`, reconstruct `J`, and verify
+`div J = 0` plus insulating `J.n = 0`.

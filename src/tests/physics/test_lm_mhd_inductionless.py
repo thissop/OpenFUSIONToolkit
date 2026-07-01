@@ -15,6 +15,7 @@ try:
         solve_potential_dirichlet_2d,
         solve_potential_neumann_2d,
         solve_variable_conductivity_dirichlet_2d,
+        solve_variable_conductivity_neumann_2d,
         structured_gradient_2d,
         wall_normal_current_extrema,
     )
@@ -44,6 +45,7 @@ except FileNotFoundError:
     solve_potential_dirichlet_2d = inductionless.solve_potential_dirichlet_2d
     solve_potential_neumann_2d = inductionless.solve_potential_neumann_2d
     solve_variable_conductivity_dirichlet_2d = inductionless.solve_variable_conductivity_dirichlet_2d
+    solve_variable_conductivity_neumann_2d = inductionless.solve_variable_conductivity_neumann_2d
     structured_gradient_2d = inductionless.structured_gradient_2d
     wall_normal_current_extrema = inductionless.wall_normal_current_extrema
 
@@ -270,3 +272,43 @@ def test_variable_conductivity_dirichlet_solver_handles_two_region_flux_continui
 
     assert np.max(np.abs(error)) < 1.0e-12
     np.testing.assert_allclose(interface_flux, flux, rtol=1.0e-12, atol=1.0e-12)
+
+
+def test_variable_conductivity_neumann_solver_recovers_nonzero_flux_mms():
+    x = np.linspace(0.0, 1.0, 49)
+    z = np.linspace(0.0, 1.0, 51)
+    x_grid, z_grid = np.meshgrid(x, z, indexing="xy")
+    phi_exact = (x_grid - 0.5) ** 2 + (z_grid - 0.5) ** 2
+    phi_exact -= np.mean(phi_exact)
+    conductivity = 1.0 + 0.3 * x_grid + 0.2 * z_grid
+    source = 4.0 * conductivity + 0.6 * (x_grid - 0.5) + 0.4 * (z_grid - 0.5)
+    normal_flux = {
+        "x_min": conductivity[:, 0],
+        "x_max": conductivity[:, -1],
+        "z_min": conductivity[0, :],
+        "z_max": conductivity[-1, :],
+    }
+
+    phi = solve_variable_conductivity_neumann_2d(
+        conductivity,
+        source,
+        x,
+        z,
+        mean_value=0.0,
+        normal_flux=normal_flux,
+    )
+    error = phi - phi_exact
+
+    assert abs(np.mean(phi)) < 1.0e-12
+    assert np.max(np.abs(error)) < 2.0e-4
+    assert np.sqrt(np.mean(error**2)) < 1.0e-4
+
+
+def test_variable_conductivity_neumann_solver_rejects_incompatible_flux():
+    x = np.linspace(0.0, 1.0, 5)
+    z = np.linspace(0.0, 1.0, 5)
+    conductivity = np.ones((5, 5))
+    source = np.ones((5, 5))
+
+    with pytest.raises(ValueError, match="incompatible"):
+        solve_variable_conductivity_neumann_2d(conductivity, source, x, z)

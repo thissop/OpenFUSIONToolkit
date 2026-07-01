@@ -360,6 +360,98 @@ def solve_variable_conductivity_dirichlet_2d(
     return phi
 
 
+def solve_variable_conductivity_neumann_2d(
+    conductivity: np.ndarray,
+    source: np.ndarray,
+    x: np.ndarray,
+    z: np.ndarray,
+    mean_value: float = 0.0,
+    normal_flux: dict[str, np.ndarray | float] | None = None,
+    compatibility_tolerance: float = 1.0e-9,
+) -> np.ndarray:
+    '''Solve div(sigma grad(phi)) = source with Neumann flux data.
+
+    `normal_flux` gives outward sigma*d(phi)/dn on `x_min`, `x_max`,
+    `z_min`, and `z_max`. Missing sides default to zero. Harmonic face
+    averages are used for interior conductivity.
+    '''
+
+    sigma, xcoord, zcoord = _structured_scalar("conductivity", conductivity, x, z)
+    if np.any(sigma <= 0.0):
+        raise ValueError("conductivity must be positive")
+    src, _, _ = _structured_scalar("source", source, x, z)
+    _require_finite("mean_value", mean_value)
+    _require_positive("compatibility_tolerance", compatibility_tolerance)
+    hx = _uniform_spacing("x", xcoord)
+    hz = _uniform_spacing("z", zcoord)
+    nz, nx = src.shape
+    fluxes = _normal_flux_values(normal_flux, nx, nz)
+    rhs_grid = src.copy()
+    size = nx * nz
+    rows = []
+    cols = []
+    data = []
+    inv_hx2 = 1.0 / hx**2
+    inv_hz2 = 1.0 / hz**2
+
+    def row_index(iz: int, ix: int) -> int:
+        return iz * nx + ix
+
+    for iz in range(nz):
+        for ix in range(nx):
+            row = row_index(iz, ix)
+            sigma_center = sigma[iz, ix]
+
+            if ix == 0:
+                sigma_e = _harmonic_mean(sigma_center, sigma[iz, ix + 1])
+                rows.extend((row, row))
+                cols.extend((row_index(iz, ix), row_index(iz, ix + 1)))
+                data.extend((-2.0 * sigma_e * inv_hx2, 2.0 * sigma_e * inv_hx2))
+                rhs_grid[iz, ix] -= 2.0 * fluxes["x_min"][iz] / hx
+            elif ix == nx - 1:
+                sigma_w = _harmonic_mean(sigma_center, sigma[iz, ix - 1])
+                rows.extend((row, row))
+                cols.extend((row_index(iz, ix), row_index(iz, ix - 1)))
+                data.extend((-2.0 * sigma_w * inv_hx2, 2.0 * sigma_w * inv_hx2))
+                rhs_grid[iz, ix] -= 2.0 * fluxes["x_max"][iz] / hx
+            else:
+                sigma_e = _harmonic_mean(sigma_center, sigma[iz, ix + 1])
+                sigma_w = _harmonic_mean(sigma_center, sigma[iz, ix - 1])
+                rows.extend((row, row, row))
+                cols.extend((row, row_index(iz, ix - 1), row_index(iz, ix + 1)))
+                data.extend((-(sigma_e + sigma_w) * inv_hx2, sigma_w * inv_hx2, sigma_e * inv_hx2))
+
+            if iz == 0:
+                sigma_n = _harmonic_mean(sigma_center, sigma[iz + 1, ix])
+                rows.extend((row, row))
+                cols.extend((row_index(iz, ix), row_index(iz + 1, ix)))
+                data.extend((-2.0 * sigma_n * inv_hz2, 2.0 * sigma_n * inv_hz2))
+                rhs_grid[iz, ix] -= 2.0 * fluxes["z_min"][ix] / hz
+            elif iz == nz - 1:
+                sigma_s = _harmonic_mean(sigma_center, sigma[iz - 1, ix])
+                rows.extend((row, row))
+                cols.extend((row_index(iz, ix), row_index(iz - 1, ix)))
+                data.extend((-2.0 * sigma_s * inv_hz2, 2.0 * sigma_s * inv_hz2))
+                rhs_grid[iz, ix] -= 2.0 * fluxes["z_max"][ix] / hz
+            else:
+                sigma_n = _harmonic_mean(sigma_center, sigma[iz + 1, ix])
+                sigma_s = _harmonic_mean(sigma_center, sigma[iz - 1, ix])
+                rows.extend((row, row, row))
+                cols.extend((row, row_index(iz - 1, ix), row_index(iz + 1, ix)))
+                data.extend((-(sigma_n + sigma_s) * inv_hz2, sigma_s * inv_hz2, sigma_n * inv_hz2))
+
+    matrix = sp.csr_matrix((data, (rows, cols)), shape=(size, size))
+    constraint = sp.csr_matrix(np.ones((1, size), dtype=np.float64))
+    augmented = sp.bmat([[matrix, constraint.T], [constraint, None]], format="csr")
+    rhs = np.concatenate((rhs_grid.ravel(), np.array([float(mean_value) * size])))
+    solution = spla.spsolve(augmented, rhs)
+    gauge_multiplier = float(solution[-1])
+    rhs_scale = max(1.0, float(np.max(np.abs(rhs_grid))))
+    if abs(gauge_multiplier) > compatibility_tolerance * rhs_scale:
+        raise ValueError("Neumann source and normal_flux data appear incompatible")
+    return solution[:size].reshape(nz, nx)
+
+
 def solve_potential_neumann_2d(
     source: np.ndarray,
     x: np.ndarray,
@@ -576,6 +668,39 @@ def _normal_gradient_values(
             raise ValueError(f"normal_gradient['{side}'] must contain only finite values")
         gradients[side] = out
     return gradients
+
+
+def _normal_flux_values(
+    values: dict[str, np.ndarray | float] | None,
+    nx: int,
+    nz: int,
+) -> dict[str, np.ndarray]:
+    fluxes = {
+        "x_min": np.zeros(nz, dtype=np.float64),
+        "x_max": np.zeros(nz, dtype=np.float64),
+        "z_min": np.zeros(nx, dtype=np.float64),
+        "z_max": np.zeros(nx, dtype=np.float64),
+    }
+    if values is None:
+        return fluxes
+    allowed = set(fluxes)
+    extra = set(values) - allowed
+    if extra:
+        raise ValueError(f"unknown normal_flux side(s): {sorted(extra)}")
+    for side, target in fluxes.items():
+        if side not in values:
+            continue
+        raw = np.asarray(values[side], dtype=np.float64)
+        if raw.shape == ():
+            out = np.full(target.shape, float(raw), dtype=np.float64)
+        else:
+            if raw.shape != target.shape:
+                raise ValueError(f"normal_flux['{side}'] must have shape {target.shape}")
+            out = raw.copy()
+        if not np.all(np.isfinite(out)):
+            raise ValueError(f"normal_flux['{side}'] must contain only finite values")
+        fluxes[side] = out
+    return fluxes
 
 
 def _require_positive(name: str, value: float) -> None:
