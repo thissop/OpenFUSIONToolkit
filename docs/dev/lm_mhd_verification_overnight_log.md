@@ -34,3 +34,4 @@ Timestamped running log. Append-only. All times UTC.
 2026-07-01T16:37:11Z - Homogeneous Neumann Poisson MMS reference implemented: mean-gauged scalar solve, zero-mean source check, second-order convergence plots/CSV, and updated inductionless report. Focused pytest currently 29 passed.
 2026-07-01T16:41:47Z - Nonzero Neumann wall-gradient MMS implemented: scalar outward-normal derivative data on all walls, polynomial roundoff recovery plot/CSV, and updated inductionless report. Focused pytest currently 30 passed.
 2026-07-01T16:43:22Z - Wrote docs/dev/lm_mhd_autonomous_progress_2026-07-01.md progress ledger summarizing commits, artifacts, checks, dirty-tree boundary, and next non-invasive inductionless reference step.
+2026-07-01T23:01:04Z - Started/implemented autonomous slice 7: full constant-sigma inductionless potential MMS linking u x B source, insulating Neumann wall data, potential solve, reconstructed current, div(J), and wall-normal-current checks.

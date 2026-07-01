@@ -5,11 +5,16 @@ try:
     from OpenFUSIONToolkit.LM_MHD import (
         charge_conservation_residual_2d,
         divergence_free_current_from_streamfunction,
+        insulating_wall_normal_gradient,
         joule_heating_density,
         lorentz_force_density,
+        motional_electric_field,
         ohms_law_current_density,
+        potential_source_from_motional_emf,
+        reconstruct_inductionless_current_2d,
         solve_potential_dirichlet_2d,
         solve_potential_neumann_2d,
+        structured_gradient_2d,
         wall_normal_current_extrema,
     )
 except FileNotFoundError:
@@ -28,11 +33,16 @@ except FileNotFoundError:
     spec.loader.exec_module(inductionless)
     charge_conservation_residual_2d = inductionless.charge_conservation_residual_2d
     divergence_free_current_from_streamfunction = inductionless.divergence_free_current_from_streamfunction
+    insulating_wall_normal_gradient = inductionless.insulating_wall_normal_gradient
     joule_heating_density = inductionless.joule_heating_density
     lorentz_force_density = inductionless.lorentz_force_density
+    motional_electric_field = inductionless.motional_electric_field
     ohms_law_current_density = inductionless.ohms_law_current_density
+    potential_source_from_motional_emf = inductionless.potential_source_from_motional_emf
+    reconstruct_inductionless_current_2d = inductionless.reconstruct_inductionless_current_2d
     solve_potential_dirichlet_2d = inductionless.solve_potential_dirichlet_2d
     solve_potential_neumann_2d = inductionless.solve_potential_neumann_2d
+    structured_gradient_2d = inductionless.structured_gradient_2d
     wall_normal_current_extrema = inductionless.wall_normal_current_extrema
 
 
@@ -167,3 +177,35 @@ def test_neumann_poisson_solver_recovers_nonzero_gradient_polynomial_mms():
 
     assert abs(np.mean(phi)) < 1.0e-12
     assert np.max(np.abs(error)) < 1.0e-10
+
+
+def test_full_inductionless_reference_recovers_potential_and_current():
+    x = np.linspace(0.0, 1.0, 49)
+    z = np.linspace(0.0, 1.0, 51)
+    x_grid, z_grid = np.meshgrid(x, z, indexing="xy")
+    sigma = 7.5
+    b_y = 2.0
+    magnetic_field = np.array([0.0, b_y, 0.0])
+
+    phi_exact = (x_grid - 0.5) ** 2 + (z_grid - 0.5) ** 2
+    phi_exact -= np.mean(phi_exact)
+    streamfunction = 0.03 * np.sin(np.pi * x_grid) * np.sin(np.pi * z_grid)
+    target_current = divergence_free_current_from_streamfunction(streamfunction, x, z)
+
+    emf = structured_gradient_2d(phi_exact, x, z) + target_current / sigma
+    velocity = np.zeros_like(target_current)
+    velocity[..., 0] = emf[..., 2] / b_y
+    velocity[..., 2] = -emf[..., 0] / b_y
+    np.testing.assert_allclose(motional_electric_field(velocity, magnetic_field), emf, rtol=1.0e-13, atol=1.0e-13)
+
+    source = potential_source_from_motional_emf(emf, x, z)
+    normal_gradient = insulating_wall_normal_gradient(emf, x, z)
+    phi = solve_potential_neumann_2d(source, x, z, normal_gradient=normal_gradient, mean_value=0.0)
+    current = reconstruct_inductionless_current_2d(phi, velocity, magnetic_field, sigma, x, z)
+    residual = charge_conservation_residual_2d(current, x, z)
+    wall_current = wall_normal_current_extrema(current)
+
+    np.testing.assert_allclose(phi, phi_exact, rtol=0.0, atol=1.0e-10)
+    np.testing.assert_allclose(current, target_current, rtol=0.0, atol=1.0e-9)
+    assert np.max(np.abs(residual[2:-2, 2:-2])) < 1.0e-9
+    assert max(wall_current.values()) < 1.0e-9

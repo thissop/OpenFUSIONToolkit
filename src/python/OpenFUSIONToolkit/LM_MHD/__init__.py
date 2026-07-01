@@ -48,11 +48,16 @@ from .closures import (
 from .inductionless import (
     charge_conservation_residual_2d,
     divergence_free_current_from_streamfunction,
+    insulating_wall_normal_gradient,
     joule_heating_density,
     lorentz_force_density,
+    motional_electric_field,
     ohms_law_current_density,
+    potential_source_from_motional_emf,
+    reconstruct_inductionless_current_2d,
     solve_potential_dirichlet_2d,
     solve_potential_neumann_2d,
+    structured_gradient_2d,
     wall_normal_current_extrema,
 )
 
@@ -95,10 +100,15 @@ __all__ = [
     "perpendicular_velocity",
     "charge_conservation_residual_2d",
     "divergence_free_current_from_streamfunction",
+    "insulating_wall_normal_gradient",
     "joule_heating_density",
     "lorentz_force_density",
+    "motional_electric_field",
     "ohms_law_current_density",
+    "potential_source_from_motional_emf",
+    "reconstruct_inductionless_current_2d",
     "solve_potential_dirichlet_2d",
     "solve_potential_neumann_2d",
+    "structured_gradient_2d",
     "wall_normal_current_extrema",
 ]

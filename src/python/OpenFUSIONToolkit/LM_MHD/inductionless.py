@@ -51,6 +51,83 @@ def joule_heating_density(current_density: np.ndarray, sigma: float | np.ndarray
     return _maybe_scalar(heating)
 
 
+def structured_gradient_2d(
+    scalar: np.ndarray,
+    x: np.ndarray,
+    z: np.ndarray,
+    components: tuple[int, int] = (0, 2),
+) -> np.ndarray:
+    '''Return grad(scalar) on a structured x-z grid as a 3-vector field.'''
+
+    values, xcoord, zcoord = _structured_scalar("scalar", scalar, x, z)
+    comp_x, comp_z = _check_components(components)
+    gradient = np.zeros(values.shape + (3,), dtype=np.float64)
+    gradient[..., comp_x] = np.gradient(values, xcoord, axis=1, edge_order=2)
+    gradient[..., comp_z] = np.gradient(values, zcoord, axis=0, edge_order=2)
+    return gradient
+
+
+def motional_electric_field(velocity: np.ndarray, magnetic_field: np.ndarray) -> np.ndarray:
+    '''Return the motional term u x B used in inductionless Ohm's law.'''
+
+    vel = _as_vector_array("velocity", velocity)
+    bfield = _broadcast_vector("magnetic_field", magnetic_field, vel.shape)
+    return np.cross(vel, bfield)
+
+
+def potential_source_from_motional_emf(
+    motional_emf: np.ndarray,
+    x: np.ndarray,
+    z: np.ndarray,
+    components: tuple[int, int] = (0, 2),
+) -> np.ndarray:
+    '''Return source div(u x B) for constant-conductivity potential solves.'''
+
+    emf = _structured_vector("motional_emf", motional_emf, x, z)
+    comp_x, comp_z = _check_components(components)
+    xcoord, zcoord = _structured_coordinates(x, z)
+    d_ex_dx = np.gradient(emf[..., comp_x], xcoord, axis=1, edge_order=2)
+    d_ez_dz = np.gradient(emf[..., comp_z], zcoord, axis=0, edge_order=2)
+    return d_ex_dx + d_ez_dz
+
+
+def insulating_wall_normal_gradient(
+    motional_emf: np.ndarray,
+    x: np.ndarray,
+    z: np.ndarray,
+    components: tuple[int, int] = (0, 2),
+) -> dict[str, np.ndarray]:
+    '''Return d(phi)/dn = (u x B).n for insulating walls.
+
+    The returned arrays are outward-normal derivatives for the rectangle sides
+    expected by `solve_potential_neumann_2d`.
+    '''
+
+    emf = _structured_vector("motional_emf", motional_emf, x, z)
+    comp_x, comp_z = _check_components(components)
+    return {
+        "x_min": -emf[:, 0, comp_x].copy(),
+        "x_max": emf[:, -1, comp_x].copy(),
+        "z_min": -emf[0, :, comp_z].copy(),
+        "z_max": emf[-1, :, comp_z].copy(),
+    }
+
+
+def reconstruct_inductionless_current_2d(
+    potential: np.ndarray,
+    velocity: np.ndarray,
+    magnetic_field: np.ndarray,
+    sigma: float | np.ndarray,
+    x: np.ndarray,
+    z: np.ndarray,
+    components: tuple[int, int] = (0, 2),
+) -> np.ndarray:
+    '''Return J = sigma(-grad(phi) + u x B) on a structured x-z grid.'''
+
+    grad_phi = structured_gradient_2d(potential, x, z, components=components)
+    return ohms_law_current_density(sigma, velocity, magnetic_field, grad_phi)
+
+
 def divergence_free_current_from_streamfunction(
     streamfunction: np.ndarray,
     x: np.ndarray,
@@ -320,6 +397,21 @@ def _structured_scalar(
     if arr.shape != (zcoord.size, xcoord.size):
         raise ValueError(f"{name} shape must match z and x coordinates")
     return arr, xcoord, zcoord
+
+
+def _structured_vector(
+    name: str,
+    values: np.ndarray,
+    x: np.ndarray,
+    z: np.ndarray,
+) -> np.ndarray:
+    arr = _as_vector_array(name, values)
+    if arr.ndim != 3:
+        raise ValueError(f"{name} must have shape (nz, nx, 3)")
+    xcoord, zcoord = _structured_coordinates(x, z)
+    if arr.shape[:2] != (zcoord.size, xcoord.size):
+        raise ValueError(f"{name} shape must match z and x coordinates")
+    return arr
 
 
 def _structured_coordinates(x: np.ndarray, z: np.ndarray) -> tuple[np.ndarray, np.ndarray]:

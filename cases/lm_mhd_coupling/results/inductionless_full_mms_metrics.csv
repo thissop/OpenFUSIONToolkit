@@ -1,0 +1,14 @@
+metric,value
+n,8.100000000000e+01
+sigma_S_m,8.000000000000e+05
+B_y_T,5.000000000000e+00
+max_abs_phi_error,1.101549407245e-16
+rms_phi_error,4.479091213253e-17
+max_abs_current_error_A_m2,3.552713678801e-10
+max_abs_divJ_A_m3,2.235174179077e-08
+rms_divJ_A_m3,4.112210231056e-09
+max_wall_normal_current_A_m2,3.552713678801e-10
+max_current_A_m2,1.000513764490e+05
+max_velocity_m_s,2.545570223421e-02
+max_lorentz_force_N_m3,5.002568822450e+05
+mean_joule_heating_W_m3,6.246305757294e+03

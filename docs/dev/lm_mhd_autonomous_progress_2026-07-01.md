@@ -125,7 +125,8 @@ Those are separate from the committed LM-MHD Python diagnostics above.
 
 ## Best next technical step
 
-The next non-invasive reference step should connect the pieces:
+The next non-invasive reference step originally identified here was to connect
+the pieces:
 
 1. Choose an MMS velocity field and uniform applied field.
 2. Generate the scalar source `div(sigma u x B)`.
@@ -137,3 +138,26 @@ The next non-invasive reference step should connect the pieces:
 
 That would be the most rigorous Python-side target before touching MUG's
 Fortran field structure for an inductionless mode.
+
+## Continuation update
+
+This step was implemented in the later autonomous continuation as the
+constant-conductivity diagnostic
+`cases/lm_mhd_coupling/inductionless_full_mms.py`. It generates
+`u x B = grad(phi_exact) + J_target/sigma`, solves the Neumann potential
+problem with wall data `(u x B).n`, reconstructs `J`, and verifies charge
+conservation plus zero wall-normal current.
+
+Default result:
+
+| quantity | value |
+|---|---:|
+| max `|phi - phi_exact|` | `1.102e-16` |
+| max `|J - J_target|` | `3.553e-10 A/m^2` |
+| max interior `|div J|` | `2.235e-8 A/m^3` |
+| max wall-normal current | `3.553e-10 A/m^2` |
+
+The next best non-invasive target is now variable-conductivity inductionless
+MMS: `div(sigma grad phi) = div(sigma u x B)` with smooth or two-region
+`sigma(x,z)`, current-continuity checks, and no Fortran edits until that
+reference is solid.

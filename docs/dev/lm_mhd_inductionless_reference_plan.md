@@ -12,6 +12,11 @@ Added `OpenFUSIONToolkit.LM_MHD.inductionless` with small tested utilities:
 - `ohms_law_current_density(sigma, velocity, magnetic_field, electric_potential_gradient)`
 - `lorentz_force_density(current_density, magnetic_field)`
 - `joule_heating_density(current_density, sigma)`
+- `structured_gradient_2d(scalar, x, z)`
+- `motional_electric_field(velocity, magnetic_field)`
+- `potential_source_from_motional_emf(motional_emf, x, z)`
+- `insulating_wall_normal_gradient(motional_emf, x, z)`
+- `reconstruct_inductionless_current_2d(potential, velocity, magnetic_field, sigma, x, z)`
 - `divergence_free_current_from_streamfunction(streamfunction, x, z)`
 - `charge_conservation_residual_2d(current_density, x, z)`
 - `wall_normal_current_extrema(current_density)`
@@ -59,6 +64,11 @@ Generated artifacts in `cases/lm_mhd_coupling/results/`:
 - `inductionless_neumann_wall_mms_metrics.csv`
 - `inductionless_neumann_wall_mms_solution.png`
 - `inductionless_neumann_wall_mms_summary.md`
+- `inductionless_full_mms_metrics.csv`
+- `inductionless_full_mms_potential.png`
+- `inductionless_full_mms_current.png`
+- `inductionless_full_mms_midplane.png`
+- `inductionless_full_mms_summary.md`
 
 Headline metrics from the default run:
 
@@ -142,9 +152,42 @@ The default `n = 65` run recovers the manufactured solution to roundoff:
 | solved mean(phi) | `-1.245e-16` |
 
 This is the scalar boundary-condition mechanism needed before testing the
-insulating inductionless condition `d phi / dn = (u x B) . n`. It still does
-not set that wall data from an actual velocity and magnetic field, and it does
-not include Robin wall-conductance closure.
+insulating inductionless condition `d phi / dn = (u x B) . n`.
+
+## Full constant-conductivity inductionless MMS
+
+The diagnostic `cases/lm_mhd_coupling/inductionless_full_mms.py` now connects
+the reference pieces:
+
+```text
+source = div(u x B)
+d phi / dn = (u x B) . n
+J = sigma (-grad(phi) + u x B)
+```
+
+The manufactured construction sets
+
+```text
+u x B = grad(phi_exact) + J_target / sigma
+```
+
+where `J_target` is generated from a streamfunction, so it is divergence-free
+and has zero wall-normal current. The potential solve should recover
+`phi_exact`, and the reconstructed current should recover `J_target`.
+
+Default metrics:
+
+| quantity | value |
+|---|---:|
+| max `|phi - phi_exact|` | `1.102e-16` |
+| max `|J - J_target|` | `3.553e-10 A/m^2` |
+| max interior `|div J|` | `2.235e-8 A/m^3` |
+| max wall-normal current | `3.553e-10 A/m^2` |
+
+This is the strongest Python-side reference target so far for a future
+constant-conductivity inductionless implementation. It still does not include
+variable conductivity, material interfaces, conducting-wall Robin closure, or a
+finite-element weak form.
 
 ## Why this matters
 
@@ -158,14 +201,13 @@ current diagnostics, Lorentz force, and Joule dissipation.
 
 ## Red-team limits
 
-- A scalar electric-potential Poisson equation is solved only in a uniform-grid
-  Dirichlet manufactured reference problem and a homogeneous-Neumann
-  manufactured reference problem.
+- A scalar electric-potential Poisson equation is solved only in uniform-grid
+  finite-difference reference problems: Dirichlet, homogeneous Neumann,
+  prescribed Neumann wall data, and constant-conductivity `u x B` MMS.
 - No finite-element weak form is implemented.
-- The Neumann reference accepts nonzero scalar wall-gradient data, but no
-  motional `u x B` wall-data generator, material jumps, conductivity tensors,
-  conducting-wall Robin condition, or current continuity across regions are
-  included.
+- The constant-conductivity `u x B` MMS has no material jumps, conductivity
+  tensors, conducting-wall Robin condition, or current continuity across
+  regions.
 - The MMS current is manufactured and is not a resolved Hartmann, Shercliff, or
   Hunt flow.
 - The structured-grid divergence diagnostic is for reference/postprocessing; it
@@ -173,9 +215,8 @@ current diagnostics, Lorentz force, and Joule dissipation.
 
 ## Next step
 
-The next non-invasive reference step should be the full inductionless scalar
-equation `div(sigma grad phi) = div(sigma u x B)` on a rectangle where the
-boundary data is generated from the same MMS velocity field via
-`d phi / dn = (u x B) . n`. That would create a direct reference target for the
-eventual finite-element electric-potential mode while still avoiding risky
-Fortran edits.
+The next non-invasive reference step should be a variable-conductivity MMS for
+`div(sigma grad phi) = div(sigma u x B)`, including either smooth
+`sigma(x,z)` or a two-region jump with current-continuity checks. That would
+exercise the part of the eventual finite-element mode most likely to matter for
+multi-material blankets while still avoiding risky Fortran edits.
