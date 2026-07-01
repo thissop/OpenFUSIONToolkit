@@ -51,6 +51,7 @@ from .inductionless import (
     joule_heating_density,
     lorentz_force_density,
     ohms_law_current_density,
+    solve_potential_dirichlet_2d,
     wall_normal_current_extrema,
 )
 
@@ -96,5 +97,6 @@ __all__ = [
     "joule_heating_density",
     "lorentz_force_density",
     "ohms_law_current_density",
+    "solve_potential_dirichlet_2d",
     "wall_normal_current_extrema",
 ]

@@ -12,6 +12,8 @@ They are not a solver and do not alter the Fortran MUG implementation.
 from __future__ import annotations
 
 import numpy as np
+import scipy.sparse as sp
+import scipy.sparse.linalg as spla
 
 
 def ohms_law_current_density(
@@ -113,6 +115,82 @@ def wall_normal_current_extrema(
     }
 
 
+def solve_potential_dirichlet_2d(
+    source: np.ndarray,
+    x: np.ndarray,
+    z: np.ndarray,
+    boundary_values: float | np.ndarray = 0.0,
+) -> np.ndarray:
+    '''Solve laplacian(phi) = source on a uniform rectangular grid.
+
+    This is a finite-difference reference solve for manufactured tests of the
+    future inductionless electric-potential equation. It uses Dirichlet boundary
+    values on all four sides. Insulating Neumann and conducting-wall Robin
+    closures are deliberately not represented by this helper.
+    '''
+
+    src, xcoord, zcoord = _structured_scalar("source", source, x, z)
+    hx = _uniform_spacing("x", xcoord)
+    hz = _uniform_spacing("z", zcoord)
+    boundary = _boundary_values(boundary_values, src.shape)
+    nz, nx = src.shape
+    nxi = nx - 2
+    nzi = nz - 2
+    if nxi < 1 or nzi < 1:
+        raise ValueError("source grid must include at least one interior point")
+
+    rows = []
+    cols = []
+    data = []
+    rhs = np.empty(nxi * nzi, dtype=np.float64)
+    inv_hx2 = 1.0 / hx**2
+    inv_hz2 = 1.0 / hz**2
+
+    def row_index(iz: int, ix: int) -> int:
+        return iz * nxi + ix
+
+    for iz in range(nzi):
+        for ix in range(nxi):
+            row = row_index(iz, ix)
+            rows.append(row)
+            cols.append(row)
+            data.append(-2.0 * (inv_hx2 + inv_hz2))
+            value = src[iz + 1, ix + 1]
+
+            if ix > 0:
+                rows.append(row)
+                cols.append(row_index(iz, ix - 1))
+                data.append(inv_hx2)
+            else:
+                value -= boundary[iz + 1, 0] * inv_hx2
+            if ix < nxi - 1:
+                rows.append(row)
+                cols.append(row_index(iz, ix + 1))
+                data.append(inv_hx2)
+            else:
+                value -= boundary[iz + 1, -1] * inv_hx2
+
+            if iz > 0:
+                rows.append(row)
+                cols.append(row_index(iz - 1, ix))
+                data.append(inv_hz2)
+            else:
+                value -= boundary[0, ix + 1] * inv_hz2
+            if iz < nzi - 1:
+                rows.append(row)
+                cols.append(row_index(iz + 1, ix))
+                data.append(inv_hz2)
+            else:
+                value -= boundary[-1, ix + 1] * inv_hz2
+            rhs[row] = value
+
+    matrix = sp.csr_matrix((data, (rows, cols)), shape=(nxi * nzi, nxi * nzi))
+    interior = spla.spsolve(matrix, rhs)
+    phi = boundary.copy()
+    phi[1:-1, 1:-1] = interior.reshape(nzi, nxi)
+    return phi
+
+
 def _as_vector_array(name: str, values: np.ndarray) -> np.ndarray:
     arr = np.asarray(values, dtype=np.float64)
     if arr.shape == () or arr.shape[-1] != 3:
@@ -176,6 +254,27 @@ def _structured_coordinates(x: np.ndarray, z: np.ndarray) -> tuple[np.ndarray, n
     if np.any(np.diff(xcoord) <= 0.0) or np.any(np.diff(zcoord) <= 0.0):
         raise ValueError("x and z must be strictly increasing")
     return xcoord, zcoord
+
+
+def _boundary_values(values: float | np.ndarray, shape: tuple[int, int]) -> np.ndarray:
+    if np.isscalar(values):
+        out = np.full(shape, float(values), dtype=np.float64)
+    else:
+        out = np.asarray(values, dtype=np.float64)
+        if out.shape != shape:
+            raise ValueError("boundary_values array must match source shape")
+        out = out.copy()
+    if not np.all(np.isfinite(out)):
+        raise ValueError("boundary_values must contain only finite values")
+    return out
+
+
+def _uniform_spacing(name: str, coord: np.ndarray) -> float:
+    diffs = np.diff(coord)
+    spacing = float(diffs[0])
+    if not np.allclose(diffs, spacing, rtol=1.0e-12, atol=1.0e-14):
+        raise ValueError(f"{name} must be uniformly spaced for this reference solve")
+    return spacing
 
 
 def _check_components(components: tuple[int, int]) -> tuple[int, int]:

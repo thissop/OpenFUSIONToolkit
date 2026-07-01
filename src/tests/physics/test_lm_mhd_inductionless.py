@@ -8,6 +8,7 @@ try:
         joule_heating_density,
         lorentz_force_density,
         ohms_law_current_density,
+        solve_potential_dirichlet_2d,
         wall_normal_current_extrema,
     )
 except FileNotFoundError:
@@ -29,6 +30,7 @@ except FileNotFoundError:
     joule_heating_density = inductionless.joule_heating_density
     lorentz_force_density = inductionless.lorentz_force_density
     ohms_law_current_density = inductionless.ohms_law_current_density
+    solve_potential_dirichlet_2d = inductionless.solve_potential_dirichlet_2d
     wall_normal_current_extrema = inductionless.wall_normal_current_extrema
 
 
@@ -93,3 +95,27 @@ def test_structured_residual_rejects_shape_mismatch():
     current = np.zeros((4, 5, 3))
     with pytest.raises(ValueError, match="shape"):
         charge_conservation_residual_2d(current, np.linspace(0.0, 1.0, 6), np.linspace(0.0, 1.0, 4))
+
+
+def test_dirichlet_poisson_solver_recovers_sine_mms():
+    x = np.linspace(0.0, 1.0, 51)
+    z = np.linspace(0.0, 1.0, 49)
+    x_grid, z_grid = np.meshgrid(x, z, indexing="xy")
+    phi_exact = np.sin(np.pi * x_grid) * np.sin(np.pi * z_grid)
+    source = -2.0 * np.pi**2 * phi_exact
+
+    phi = solve_potential_dirichlet_2d(source, x, z, boundary_values=0.0)
+
+    max_error = np.max(np.abs(phi - phi_exact))
+    rms_error = np.sqrt(np.mean((phi - phi_exact) ** 2))
+    assert max_error < 4.0e-4
+    assert rms_error < 2.0e-4
+
+
+def test_dirichlet_poisson_solver_rejects_nonuniform_grid():
+    source = np.zeros((5, 5))
+    x = np.array([0.0, 0.2, 0.5, 0.75, 1.0])
+    z = np.linspace(0.0, 1.0, 5)
+
+    with pytest.raises(ValueError, match="uniformly spaced"):
+        solve_potential_dirichlet_2d(source, x, z)
