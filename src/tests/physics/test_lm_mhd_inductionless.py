@@ -240,3 +240,33 @@ def test_variable_conductivity_dirichlet_solver_rejects_nonpositive_sigma():
 
     with pytest.raises(ValueError, match="conductivity"):
         solve_variable_conductivity_dirichlet_2d(conductivity, source, x, z)
+
+
+def test_variable_conductivity_dirichlet_solver_handles_two_region_flux_continuity():
+    x = np.linspace(0.0, 1.0, 64)
+    z = np.linspace(0.0, 1.0, 17)
+    x_grid, _ = np.meshgrid(x, z, indexing="xy")
+    interface = 0.5
+    sigma_left = 1.0
+    sigma_right = 4.0
+    flux = 1.0 / (interface / sigma_left + (1.0 - interface) / sigma_right)
+    conductivity = np.where(x_grid < interface, sigma_left, sigma_right)
+    phi_1d = np.where(
+        x <= interface,
+        flux * x / sigma_left,
+        flux * interface / sigma_left + flux * (x - interface) / sigma_right,
+    )
+    phi_exact = np.broadcast_to(phi_1d, x_grid.shape)
+    source = np.zeros_like(phi_exact)
+
+    phi = solve_variable_conductivity_dirichlet_2d(conductivity, source, x, z, boundary_values=phi_exact)
+    error = phi - phi_exact
+
+    left_idx = x.size // 2 - 1
+    right_idx = x.size // 2
+    h = x[1] - x[0]
+    sigma_face = 2.0 * sigma_left * sigma_right / (sigma_left + sigma_right)
+    interface_flux = sigma_face * (phi[:, right_idx] - phi[:, left_idx]) / h
+
+    assert np.max(np.abs(error)) < 1.0e-12
+    np.testing.assert_allclose(interface_flux, flux, rtol=1.0e-12, atol=1.0e-12)

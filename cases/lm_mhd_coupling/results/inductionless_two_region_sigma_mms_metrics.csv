@@ -1,0 +1,5 @@
+metric,value
+target_flux,1.600000000000e+00
+max_error,6.217248937901e-14
+rms_error,3.205835861624e-14
+max_interface_flux_error,1.061373211542e-13

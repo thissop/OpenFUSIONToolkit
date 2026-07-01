@@ -73,6 +73,10 @@ Generated artifacts in `cases/lm_mhd_coupling/results/`:
 - `inductionless_variable_sigma_mms_solution.png`
 - `inductionless_variable_sigma_mms_convergence.png`
 - `inductionless_variable_sigma_mms_summary.md`
+- `inductionless_two_region_sigma_mms_metrics.csv`
+- `inductionless_two_region_sigma_mms_solution.png`
+- `inductionless_two_region_sigma_mms_flux.png`
+- `inductionless_two_region_sigma_mms_summary.md`
 
 Headline metrics from the default run:
 
@@ -223,6 +227,29 @@ Observed max-error convergence:
 | 49 | `2.083e-2` | `3.568e-4` | `2.001` |
 | 65 | `1.562e-2` | `2.007e-4` | `2.000` |
 
+## Two-region conductivity-jump reference
+
+The diagnostic `cases/lm_mhd_coupling/inductionless_two_region_sigma_mms.py`
+checks a face-aligned material interface. The source is zero, the exact
+potential is piecewise linear, and the normal current is continuous across the
+interface:
+
+```text
+sigma_left = 1
+sigma_right = 4
+target interface flux = 1.6
+```
+
+The variable-conductivity reference uses harmonic face averages, which recover
+the interface flux for this face-aligned two-region problem.
+
+Default result:
+
+| quantity | value |
+|---|---:|
+| max potential error | `6.217e-14` |
+| max interface-flux error | `1.061e-13` |
+
 ## Why this matters
 
 The roadmap correctly identifies inductionless electric-potential MHD as the
@@ -242,8 +269,9 @@ current diagnostics, Lorentz force, and Joule dissipation.
 - The constant-conductivity `u x B` MMS has no material jumps, conductivity
   tensors, conducting-wall Robin condition, or current continuity across
   regions.
-- The variable-conductivity MMS is smooth and Dirichlet-only; it does not yet
-  test discontinuous material interfaces or Neumann current closure.
+- The two-region conductivity-jump MMS is face-aligned and one-dimensional in
+  x; it does not yet test curved or unaligned material interfaces.
+- Variable-coefficient Neumann current closure is not implemented yet.
 - The MMS current is manufactured and is not a resolved Hartmann, Shercliff, or
   Hunt flow.
 - The structured-grid divergence diagnostic is for reference/postprocessing; it
@@ -251,7 +279,8 @@ current diagnostics, Lorentz force, and Joule dissipation.
 
 ## Next step
 
-The next non-invasive reference step should be a two-region conductivity-jump
-MMS with continuity of potential and normal current across the interface. That
-would exercise the part of the eventual finite-element mode most likely to
-matter for multi-material blankets while still avoiding risky Fortran edits.
+The next non-invasive reference step should be variable-coefficient Neumann
+current closure: solve `div(sigma grad phi) = div(sigma u x B)` with prescribed
+normal current data and verify `J.n = 0` on insulating walls for spatially
+varying or regional sigma. That would connect the material-coefficient and
+inductionless-current pieces before any Fortran edits.

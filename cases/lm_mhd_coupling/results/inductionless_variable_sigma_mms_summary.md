@@ -11,8 +11,8 @@ Manufactured setup:
 
 Finest-grid result:
 - n = 65.
-- max error = 2.007e-04.
-- rms error = 9.873e-05.
+- max error = 2.032e-04.
+- rms error = 1.000e-04.
 
 Generated files:
 - `inductionless_variable_sigma_mms_metrics.csv`

@@ -277,7 +277,7 @@ def solve_variable_conductivity_dirichlet_2d(
 ) -> np.ndarray:
     '''Solve div(sigma grad(phi)) = source with Dirichlet walls.
 
-    This uniform-grid reference uses arithmetic face averages for sigma. It is
+    This uniform-grid reference uses harmonic face averages for sigma. It is
     meant for manufactured tests of regional/material-coefficient handling, not
     for production blanket solves.
     '''
@@ -311,10 +311,10 @@ def solve_variable_conductivity_dirichlet_2d(
             grid_x = ix + 1
             row = row_index(iz, ix)
             sigma_center = sigma[grid_z, grid_x]
-            sigma_e = 0.5 * (sigma_center + sigma[grid_z, grid_x + 1])
-            sigma_w = 0.5 * (sigma_center + sigma[grid_z, grid_x - 1])
-            sigma_n = 0.5 * (sigma_center + sigma[grid_z + 1, grid_x])
-            sigma_s = 0.5 * (sigma_center + sigma[grid_z - 1, grid_x])
+            sigma_e = _harmonic_mean(sigma_center, sigma[grid_z, grid_x + 1])
+            sigma_w = _harmonic_mean(sigma_center, sigma[grid_z, grid_x - 1])
+            sigma_n = _harmonic_mean(sigma_center, sigma[grid_z + 1, grid_x])
+            sigma_s = _harmonic_mean(sigma_center, sigma[grid_z - 1, grid_x])
 
             rows.append(row)
             cols.append(row)
@@ -539,6 +539,10 @@ def _uniform_spacing(name: str, coord: np.ndarray) -> float:
     if not np.allclose(diffs, spacing, rtol=1.0e-12, atol=1.0e-14):
         raise ValueError(f"{name} must be uniformly spaced for this reference solve")
     return spacing
+
+
+def _harmonic_mean(left: float, right: float) -> float:
+    return float(2.0 * left * right / (left + right))
 
 
 def _normal_gradient_values(

@@ -36,3 +36,4 @@ Timestamped running log. Append-only. All times UTC.
 2026-07-01T16:43:22Z - Wrote docs/dev/lm_mhd_autonomous_progress_2026-07-01.md progress ledger summarizing commits, artifacts, checks, dirty-tree boundary, and next non-invasive inductionless reference step.
 2026-07-01T23:01:04Z - Started/implemented autonomous slice 7: full constant-sigma inductionless potential MMS linking u x B source, insulating Neumann wall data, potential solve, reconstructed current, div(J), and wall-normal-current checks.
 2026-07-01T23:05:45Z - Implemented autonomous slice 8: smooth variable-conductivity Dirichlet MMS for div(sigma grad(phi)), second-order convergence plots/CSV, and positive-conductivity tests.
+2026-07-01T23:10:15Z - Implemented autonomous slice 9: two-region conductivity-jump MMS with harmonic face averaging, face-aligned interface, roundoff potential recovery, and normal-current continuity plot/CSV.

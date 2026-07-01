@@ -179,5 +179,20 @@ Default convergence:
 | 49 | `3.568e-4` | `2.001` |
 | 65 | `2.007e-4` | `2.000` |
 
-The next best target is now a two-region conductivity-jump MMS with continuity
-of potential and normal current across the interface.
+The two-region conductivity-jump reference was then implemented as
+`cases/lm_mhd_coupling/inductionless_two_region_sigma_mms.py`. It uses
+harmonic face averaging across a face-aligned interface with
+`sigma_left = 1`, `sigma_right = 4`, zero source, and piecewise-linear exact
+potential.
+
+Default result:
+
+| quantity | value |
+|---|---:|
+| target interface flux | `1.600e0` |
+| max potential error | `6.217e-14` |
+| max interface-flux error | `1.061e-13` |
+
+The next best target is now variable-coefficient Neumann current closure:
+`div(sigma grad phi) = div(sigma u x B)` with insulating `J.n = 0` wall checks
+for spatially varying or regional sigma.
