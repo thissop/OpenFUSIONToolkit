@@ -26,6 +26,17 @@ from .coupling import (
     sheet_delta_b,
     write_coupling_snapshot,
 )
+from .closures import (
+    cells_per_hartmann_layer,
+    classify_hartmann_resolution,
+    drag_power_density,
+    hartmann_channel_effective_drag,
+    hartmann_layer_thickness,
+    hartmann_mean_over_centerline,
+    implicit_drag_update,
+    parallel_velocity,
+    perpendicular_velocity,
+)
 
 __all__ = [
     "MU0",
@@ -47,4 +58,13 @@ __all__ = [
     "reynolds_number",
     "sheet_delta_b",
     "write_coupling_snapshot",
+    "cells_per_hartmann_layer",
+    "classify_hartmann_resolution",
+    "drag_power_density",
+    "hartmann_channel_effective_drag",
+    "hartmann_layer_thickness",
+    "hartmann_mean_over_centerline",
+    "implicit_drag_update",
+    "parallel_velocity",
+    "perpendicular_velocity",
 ]

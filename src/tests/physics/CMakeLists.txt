@@ -49,6 +49,7 @@ if( OFT_BUILD_TESTS )
 
   # TokaMaker tests
   configure_file( test_TokaMaker.py ${CMAKE_CURRENT_BINARY_DIR} COPYONLY )
+  configure_file( test_lm_mhd_closures.py ${CMAKE_CURRENT_BINARY_DIR} COPYONLY )
   configure_file( test_lm_mhd_coupling.py ${CMAKE_CURRENT_BINARY_DIR} COPYONLY )
   configure_file( ITER_geom.json ${CMAKE_CURRENT_BINARY_DIR} COPYONLY )
   configure_file( ITER_test.eqdsk ${CMAKE_CURRENT_BINARY_DIR} COPYONLY )
