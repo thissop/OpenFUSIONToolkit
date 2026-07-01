@@ -144,5 +144,26 @@ def test_neumann_poisson_solver_rejects_incompatible_source():
     z = np.linspace(0.0, 1.0, 5)
     source = np.ones((5, 5))
 
-    with pytest.raises(ValueError, match="zero grid mean"):
+    with pytest.raises(ValueError, match="incompatible"):
         solve_potential_neumann_2d(source, x, z)
+
+
+def test_neumann_poisson_solver_recovers_nonzero_gradient_polynomial_mms():
+    x = np.linspace(0.0, 1.0, 33)
+    z = np.linspace(0.0, 1.0, 35)
+    x_grid, z_grid = np.meshgrid(x, z, indexing="xy")
+    phi_exact = (x_grid - 0.5) ** 2 + (z_grid - 0.5) ** 2
+    phi_exact -= np.mean(phi_exact)
+    source = np.full_like(phi_exact, 4.0)
+    normal_gradient = {
+        "x_min": np.ones_like(z),
+        "x_max": np.ones_like(z),
+        "z_min": np.ones_like(x),
+        "z_max": np.ones_like(x),
+    }
+
+    phi = solve_potential_neumann_2d(source, x, z, mean_value=0.0, normal_gradient=normal_gradient)
+    error = phi - phi_exact
+
+    assert abs(np.mean(phi)) < 1.0e-12
+    assert np.max(np.abs(error)) < 1.0e-10

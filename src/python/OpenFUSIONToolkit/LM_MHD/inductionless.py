@@ -196,25 +196,26 @@ def solve_potential_neumann_2d(
     x: np.ndarray,
     z: np.ndarray,
     mean_value: float = 0.0,
+    normal_gradient: dict[str, np.ndarray | float] | None = None,
+    compatibility_tolerance: float = 1.0e-9,
 ) -> np.ndarray:
-    '''Solve laplacian(phi) = source with homogeneous Neumann walls.
+    '''Solve laplacian(phi) = source with Neumann wall data.
 
     The solve uses a reflected-ghost finite-difference stencil on a uniform
     rectangular grid and fixes the nullspace by enforcing the requested mean
-    value. The compatibility condition integral(source) = 0 is checked using
-    the grid mean. Nonzero wall-current Neumann data and Robin conducting-wall
-    closure are not represented by this helper.
+    value. `normal_gradient` gives outward-normal d(phi)/dn data on the four
+    sides: `x_min`, `x_max`, `z_min`, and `z_max`. Missing sides default to
+    zero. Robin conducting-wall closure is not represented by this helper.
     '''
 
     src, xcoord, zcoord = _structured_scalar("source", source, x, z)
     _require_finite("mean_value", mean_value)
+    _require_positive("compatibility_tolerance", compatibility_tolerance)
     hx = _uniform_spacing("x", xcoord)
     hz = _uniform_spacing("z", zcoord)
-    src_scale = max(1.0, float(np.max(np.abs(src))))
-    if abs(float(np.mean(src))) > 1.0e-10 * src_scale:
-        raise ValueError("homogeneous Neumann source must have zero grid mean")
-
     nz, nx = src.shape
+    gradients = _normal_gradient_values(normal_gradient, nx, nz)
+    rhs_grid = src.copy()
     size = nx * nz
     rows = []
     cols = []
@@ -232,10 +233,12 @@ def solve_potential_neumann_2d(
                 rows.extend((row, row))
                 cols.extend((row_index(iz, 0), row_index(iz, 1)))
                 data.extend((-2.0 * inv_hx2, 2.0 * inv_hx2))
+                rhs_grid[iz, ix] -= 2.0 * gradients["x_min"][iz] / hx
             elif ix == nx - 1:
                 rows.extend((row, row))
                 cols.extend((row_index(iz, nx - 1), row_index(iz, nx - 2)))
                 data.extend((-2.0 * inv_hx2, 2.0 * inv_hx2))
+                rhs_grid[iz, ix] -= 2.0 * gradients["x_max"][iz] / hx
             else:
                 rows.extend((row, row, row))
                 cols.extend((row, row_index(iz, ix - 1), row_index(iz, ix + 1)))
@@ -245,10 +248,12 @@ def solve_potential_neumann_2d(
                 rows.extend((row, row))
                 cols.extend((row_index(0, ix), row_index(1, ix)))
                 data.extend((-2.0 * inv_hz2, 2.0 * inv_hz2))
+                rhs_grid[iz, ix] -= 2.0 * gradients["z_min"][ix] / hz
             elif iz == nz - 1:
                 rows.extend((row, row))
                 cols.extend((row_index(nz - 1, ix), row_index(nz - 2, ix)))
                 data.extend((-2.0 * inv_hz2, 2.0 * inv_hz2))
+                rhs_grid[iz, ix] -= 2.0 * gradients["z_max"][ix] / hz
             else:
                 rows.extend((row, row, row))
                 cols.extend((row, row_index(iz - 1, ix), row_index(iz + 1, ix)))
@@ -257,9 +262,13 @@ def solve_potential_neumann_2d(
     matrix = sp.csr_matrix((data, (rows, cols)), shape=(size, size))
     constraint = sp.csr_matrix(np.ones((1, size), dtype=np.float64))
     augmented = sp.bmat([[matrix, constraint.T], [constraint, None]], format="csr")
-    rhs = np.concatenate((src.ravel(), np.array([float(mean_value) * size])))
-    solution = spla.spsolve(augmented, rhs)[:size]
-    return solution.reshape(nz, nx)
+    rhs = np.concatenate((rhs_grid.ravel(), np.array([float(mean_value) * size])))
+    solution = spla.spsolve(augmented, rhs)
+    gauge_multiplier = float(solution[-1])
+    rhs_scale = max(1.0, float(np.max(np.abs(rhs_grid))))
+    if abs(gauge_multiplier) > compatibility_tolerance * rhs_scale:
+        raise ValueError("Neumann source and normal_gradient data appear incompatible")
+    return solution[:size].reshape(nz, nx)
 
 
 def _as_vector_array(name: str, values: np.ndarray) -> np.ndarray:
@@ -346,6 +355,44 @@ def _uniform_spacing(name: str, coord: np.ndarray) -> float:
     if not np.allclose(diffs, spacing, rtol=1.0e-12, atol=1.0e-14):
         raise ValueError(f"{name} must be uniformly spaced for this reference solve")
     return spacing
+
+
+def _normal_gradient_values(
+    values: dict[str, np.ndarray | float] | None,
+    nx: int,
+    nz: int,
+) -> dict[str, np.ndarray]:
+    gradients = {
+        "x_min": np.zeros(nz, dtype=np.float64),
+        "x_max": np.zeros(nz, dtype=np.float64),
+        "z_min": np.zeros(nx, dtype=np.float64),
+        "z_max": np.zeros(nx, dtype=np.float64),
+    }
+    if values is None:
+        return gradients
+    allowed = set(gradients)
+    extra = set(values) - allowed
+    if extra:
+        raise ValueError(f"unknown normal_gradient side(s): {sorted(extra)}")
+    for side, target in gradients.items():
+        if side not in values:
+            continue
+        raw = np.asarray(values[side], dtype=np.float64)
+        if raw.shape == ():
+            out = np.full(target.shape, float(raw), dtype=np.float64)
+        else:
+            if raw.shape != target.shape:
+                raise ValueError(f"normal_gradient['{side}'] must have shape {target.shape}")
+            out = raw.copy()
+        if not np.all(np.isfinite(out)):
+            raise ValueError(f"normal_gradient['{side}'] must contain only finite values")
+        gradients[side] = out
+    return gradients
+
+
+def _require_positive(name: str, value: float) -> None:
+    if not np.isfinite(value) or value <= 0.0:
+        raise ValueError(f"{name} must be positive")
 
 
 def _require_finite(name: str, value: float) -> None:

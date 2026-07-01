@@ -32,3 +32,4 @@ Timestamped running log. Append-only. All times UTC.
 2026-07-01T16:32:48Z - Dirichlet Poisson MMS reference implemented: uniform-grid scalar solve, second-order convergence diagnostic, smplotlib solution/convergence plots, and updated inductionless report. Focused pytest currently 27 passed.
 2026-07-01T16:34:12Z - Started autonomous slice 5: homogeneous Neumann Poisson MMS reference with mean-value gauge for insulating-wall-adjacent electric-potential diagnostics.
 2026-07-01T16:37:11Z - Homogeneous Neumann Poisson MMS reference implemented: mean-gauged scalar solve, zero-mean source check, second-order convergence plots/CSV, and updated inductionless report. Focused pytest currently 29 passed.
+2026-07-01T16:41:47Z - Nonzero Neumann wall-gradient MMS implemented: scalar outward-normal derivative data on all walls, polynomial roundoff recovery plot/CSV, and updated inductionless report. Focused pytest currently 30 passed.

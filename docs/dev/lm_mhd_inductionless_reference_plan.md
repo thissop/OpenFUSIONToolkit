@@ -56,6 +56,9 @@ Generated artifacts in `cases/lm_mhd_coupling/results/`:
 - `inductionless_neumann_mms_solution.png`
 - `inductionless_neumann_mms_convergence.png`
 - `inductionless_neumann_mms_summary.md`
+- `inductionless_neumann_wall_mms_metrics.csv`
+- `inductionless_neumann_wall_mms_solution.png`
+- `inductionless_neumann_wall_mms_summary.md`
 
 Headline metrics from the default run:
 
@@ -115,9 +118,33 @@ The observed max-error convergence is again second order:
 | 65 | `1.562e-2` | `2.008e-4` | `2.000` |
 
 This is closer to insulating-wall electric-potential checks than the Dirichlet
-solve, but it still has homogeneous wall data only. A real inductionless
-blanket solve needs nonzero motional Neumann data,
-`d phi / dn = (u x B) . n`, and eventually Robin wall-conductance closure.
+solve, but homogeneous wall data alone is not enough for a moving liquid metal.
+
+## Nonzero Neumann wall-data reference
+
+The Neumann reference now also accepts prescribed outward-normal derivative
+data on `x_min`, `x_max`, `z_min`, and `z_max`. The diagnostic
+`cases/lm_mhd_coupling/inductionless_neumann_wall_mms.py` verifies the wall-data
+plumbing with a quadratic manufactured solution:
+
+```text
+phi = (x - 1/2)^2 + (z - 1/2)^2 - mean(phi)
+laplacian(phi) = 4
+d phi / dn = 1 on all four walls
+```
+
+The default `n = 65` run recovers the manufactured solution to roundoff:
+
+| quantity | value |
+|---|---:|
+| max error | `3.220e-15` |
+| rms error | `1.533e-15` |
+| solved mean(phi) | `-1.245e-16` |
+
+This is the scalar boundary-condition mechanism needed before testing the
+insulating inductionless condition `d phi / dn = (u x B) . n`. It still does
+not set that wall data from an actual velocity and magnetic field, and it does
+not include Robin wall-conductance closure.
 
 ## Why this matters
 
@@ -135,9 +162,10 @@ current diagnostics, Lorentz force, and Joule dissipation.
   Dirichlet manufactured reference problem and a homogeneous-Neumann
   manufactured reference problem.
 - No finite-element weak form is implemented.
-- The Neumann reference is homogeneous only; no nonzero motional-wall Neumann
-  data, material jumps, conductivity tensors, conducting-wall Robin condition,
-  or current continuity across regions are included.
+- The Neumann reference accepts nonzero scalar wall-gradient data, but no
+  motional `u x B` wall-data generator, material jumps, conductivity tensors,
+  conducting-wall Robin condition, or current continuity across regions are
+  included.
 - The MMS current is manufactured and is not a resolved Hartmann, Shercliff, or
   Hunt flow.
 - The structured-grid divergence diagnostic is for reference/postprocessing; it
@@ -146,7 +174,8 @@ current diagnostics, Lorentz force, and Joule dissipation.
 ## Next step
 
 The next non-invasive reference step should be the full inductionless scalar
-equation `div(sigma grad phi) = div(sigma u x B)` on a rectangle with nonzero
-motional Neumann data and an MMS velocity field. That would create a direct
-reference target for the eventual finite-element electric-potential mode while
-still avoiding risky Fortran edits.
+equation `div(sigma grad phi) = div(sigma u x B)` on a rectangle where the
+boundary data is generated from the same MMS velocity field via
+`d phi / dn = (u x B) . n`. That would create a direct reference target for the
+eventual finite-element electric-potential mode while still avoiding risky
+Fortran edits.
