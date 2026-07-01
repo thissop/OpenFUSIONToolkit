@@ -52,6 +52,10 @@ Generated artifacts in `cases/lm_mhd_coupling/results/`:
 - `inductionless_poisson_mms_solution.png`
 - `inductionless_poisson_mms_convergence.png`
 - `inductionless_poisson_mms_summary.md`
+- `inductionless_neumann_mms_metrics.csv`
+- `inductionless_neumann_mms_solution.png`
+- `inductionless_neumann_mms_convergence.png`
+- `inductionless_neumann_mms_summary.md`
 
 Headline metrics from the default run:
 
@@ -90,6 +94,31 @@ This does not yet represent insulating MHD walls. It is a scalar solve target
 for the eventual electric-potential equation and a useful way to keep sign and
 operator conventions from drifting while the Fortran design is still pending.
 
+## Homogeneous Neumann reference solve
+
+The module also includes `solve_potential_neumann_2d`, a uniform-grid
+finite-difference solve for the same scalar Poisson equation with homogeneous
+Neumann walls and a mean-value gauge. The diagnostic
+`cases/lm_mhd_coupling/inductionless_neumann_mms.py` verifies it against
+`phi = cos(pi x) cos(pi z)`, which has zero normal derivative on all four
+boundaries. The source has zero grid mean to roundoff, satisfying the Neumann
+compatibility condition.
+
+The observed max-error convergence is again second order:
+
+| n | h | max mean-free error | observed order |
+|---:|---:|---:|---:|
+| 17 | `6.250e-2` | `3.219e-3` | |
+| 25 | `4.167e-2` | `1.429e-3` | `2.003` |
+| 33 | `3.125e-2` | `8.036e-4` | `2.001` |
+| 49 | `2.083e-2` | `3.571e-4` | `2.001` |
+| 65 | `1.562e-2` | `2.008e-4` | `2.000` |
+
+This is closer to insulating-wall electric-potential checks than the Dirichlet
+solve, but it still has homogeneous wall data only. A real inductionless
+blanket solve needs nonzero motional Neumann data,
+`d phi / dn = (u x B) . n`, and eventually Robin wall-conductance closure.
+
 ## Why this matters
 
 The roadmap correctly identifies inductionless electric-potential MHD as the
@@ -103,11 +132,12 @@ current diagnostics, Lorentz force, and Joule dissipation.
 ## Red-team limits
 
 - A scalar electric-potential Poisson equation is solved only in a uniform-grid
-  Dirichlet manufactured reference problem.
+  Dirichlet manufactured reference problem and a homogeneous-Neumann
+  manufactured reference problem.
 - No finite-element weak form is implemented.
-- The Poisson reference solve is Dirichlet-only; no insulating Neumann,
-  material jumps, conductivity tensors, conducting-wall Robin condition, or
-  current continuity across regions are included.
+- The Neumann reference is homogeneous only; no nonzero motional-wall Neumann
+  data, material jumps, conductivity tensors, conducting-wall Robin condition,
+  or current continuity across regions are included.
 - The MMS current is manufactured and is not a resolved Hartmann, Shercliff, or
   Hunt flow.
 - The structured-grid divergence diagnostic is for reference/postprocessing; it
@@ -115,9 +145,8 @@ current diagnostics, Lorentz force, and Joule dissipation.
 
 ## Next step
 
-The next non-invasive reference step should be a scalar Poisson solve for
-`div(sigma grad phi) = div(sigma u x B)` on a rectangle with insulating Neumann
-walls, plus a manufactured solution with nonzero electric potential and
-wall-normal current closure. That would create a direct reference target for
-the eventual finite-element electric-potential mode while still avoiding risky
-Fortran edits.
+The next non-invasive reference step should be the full inductionless scalar
+equation `div(sigma grad phi) = div(sigma u x B)` on a rectangle with nonzero
+motional Neumann data and an MMS velocity field. That would create a direct
+reference target for the eventual finite-element electric-potential mode while
+still avoiding risky Fortran edits.

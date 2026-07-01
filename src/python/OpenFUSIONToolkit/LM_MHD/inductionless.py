@@ -191,6 +191,77 @@ def solve_potential_dirichlet_2d(
     return phi
 
 
+def solve_potential_neumann_2d(
+    source: np.ndarray,
+    x: np.ndarray,
+    z: np.ndarray,
+    mean_value: float = 0.0,
+) -> np.ndarray:
+    '''Solve laplacian(phi) = source with homogeneous Neumann walls.
+
+    The solve uses a reflected-ghost finite-difference stencil on a uniform
+    rectangular grid and fixes the nullspace by enforcing the requested mean
+    value. The compatibility condition integral(source) = 0 is checked using
+    the grid mean. Nonzero wall-current Neumann data and Robin conducting-wall
+    closure are not represented by this helper.
+    '''
+
+    src, xcoord, zcoord = _structured_scalar("source", source, x, z)
+    _require_finite("mean_value", mean_value)
+    hx = _uniform_spacing("x", xcoord)
+    hz = _uniform_spacing("z", zcoord)
+    src_scale = max(1.0, float(np.max(np.abs(src))))
+    if abs(float(np.mean(src))) > 1.0e-10 * src_scale:
+        raise ValueError("homogeneous Neumann source must have zero grid mean")
+
+    nz, nx = src.shape
+    size = nx * nz
+    rows = []
+    cols = []
+    data = []
+    inv_hx2 = 1.0 / hx**2
+    inv_hz2 = 1.0 / hz**2
+
+    def row_index(iz: int, ix: int) -> int:
+        return iz * nx + ix
+
+    for iz in range(nz):
+        for ix in range(nx):
+            row = row_index(iz, ix)
+            if ix == 0:
+                rows.extend((row, row))
+                cols.extend((row_index(iz, 0), row_index(iz, 1)))
+                data.extend((-2.0 * inv_hx2, 2.0 * inv_hx2))
+            elif ix == nx - 1:
+                rows.extend((row, row))
+                cols.extend((row_index(iz, nx - 1), row_index(iz, nx - 2)))
+                data.extend((-2.0 * inv_hx2, 2.0 * inv_hx2))
+            else:
+                rows.extend((row, row, row))
+                cols.extend((row, row_index(iz, ix - 1), row_index(iz, ix + 1)))
+                data.extend((-2.0 * inv_hx2, inv_hx2, inv_hx2))
+
+            if iz == 0:
+                rows.extend((row, row))
+                cols.extend((row_index(0, ix), row_index(1, ix)))
+                data.extend((-2.0 * inv_hz2, 2.0 * inv_hz2))
+            elif iz == nz - 1:
+                rows.extend((row, row))
+                cols.extend((row_index(nz - 1, ix), row_index(nz - 2, ix)))
+                data.extend((-2.0 * inv_hz2, 2.0 * inv_hz2))
+            else:
+                rows.extend((row, row, row))
+                cols.extend((row, row_index(iz - 1, ix), row_index(iz + 1, ix)))
+                data.extend((-2.0 * inv_hz2, inv_hz2, inv_hz2))
+
+    matrix = sp.csr_matrix((data, (rows, cols)), shape=(size, size))
+    constraint = sp.csr_matrix(np.ones((1, size), dtype=np.float64))
+    augmented = sp.bmat([[matrix, constraint.T], [constraint, None]], format="csr")
+    rhs = np.concatenate((src.ravel(), np.array([float(mean_value) * size])))
+    solution = spla.spsolve(augmented, rhs)[:size]
+    return solution.reshape(nz, nx)
+
+
 def _as_vector_array(name: str, values: np.ndarray) -> np.ndarray:
     arr = np.asarray(values, dtype=np.float64)
     if arr.shape == () or arr.shape[-1] != 3:
@@ -275,6 +346,11 @@ def _uniform_spacing(name: str, coord: np.ndarray) -> float:
     if not np.allclose(diffs, spacing, rtol=1.0e-12, atol=1.0e-14):
         raise ValueError(f"{name} must be uniformly spaced for this reference solve")
     return spacing
+
+
+def _require_finite(name: str, value: float) -> None:
+    if not np.isfinite(value):
+        raise ValueError(f"{name} must be finite")
 
 
 def _check_components(components: tuple[int, int]) -> tuple[int, int]:

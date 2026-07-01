@@ -9,6 +9,7 @@ try:
         lorentz_force_density,
         ohms_law_current_density,
         solve_potential_dirichlet_2d,
+        solve_potential_neumann_2d,
         wall_normal_current_extrema,
     )
 except FileNotFoundError:
@@ -31,6 +32,7 @@ except FileNotFoundError:
     lorentz_force_density = inductionless.lorentz_force_density
     ohms_law_current_density = inductionless.ohms_law_current_density
     solve_potential_dirichlet_2d = inductionless.solve_potential_dirichlet_2d
+    solve_potential_neumann_2d = inductionless.solve_potential_neumann_2d
     wall_normal_current_extrema = inductionless.wall_normal_current_extrema
 
 
@@ -119,3 +121,28 @@ def test_dirichlet_poisson_solver_rejects_nonuniform_grid():
 
     with pytest.raises(ValueError, match="uniformly spaced"):
         solve_potential_dirichlet_2d(source, x, z)
+
+
+def test_neumann_poisson_solver_recovers_cosine_mms_with_mean_gauge():
+    x = np.linspace(0.0, 1.0, 49)
+    z = np.linspace(0.0, 1.0, 51)
+    x_grid, z_grid = np.meshgrid(x, z, indexing="xy")
+    phi_exact = np.cos(np.pi * x_grid) * np.cos(np.pi * z_grid)
+    source = -2.0 * np.pi**2 * phi_exact
+
+    phi = solve_potential_neumann_2d(source, x, z, mean_value=0.0)
+    error = phi - phi_exact
+    error -= np.mean(error)
+
+    assert abs(np.mean(phi)) < 1.0e-12
+    assert np.max(np.abs(error)) < 4.0e-4
+    assert np.sqrt(np.mean(error**2)) < 2.0e-4
+
+
+def test_neumann_poisson_solver_rejects_incompatible_source():
+    x = np.linspace(0.0, 1.0, 5)
+    z = np.linspace(0.0, 1.0, 5)
+    source = np.ones((5, 5))
+
+    with pytest.raises(ValueError, match="zero grid mean"):
+        solve_potential_neumann_2d(source, x, z)

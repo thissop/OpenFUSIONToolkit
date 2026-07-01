@@ -30,3 +30,5 @@ Timestamped running log. Append-only. All times UTC.
 2026-07-01T16:27:42Z - Inductionless reference diagnostics implemented: ohms-law/current/force/Joule helpers, streamfunction MMS, smplotlib plots, metrics CSV, and docs/dev/lm_mhd_inductionless_reference_plan.md. Focused pytest currently 25 passed.
 2026-07-01T16:29:38Z - Started autonomous slice 4: uniform-grid electric-potential Poisson MMS reference for inductionless mode; Dirichlet manufactured solve only, Neumann/Robin wall-current closure deferred.
 2026-07-01T16:32:48Z - Dirichlet Poisson MMS reference implemented: uniform-grid scalar solve, second-order convergence diagnostic, smplotlib solution/convergence plots, and updated inductionless report. Focused pytest currently 27 passed.
+2026-07-01T16:34:12Z - Started autonomous slice 5: homogeneous Neumann Poisson MMS reference with mean-value gauge for insulating-wall-adjacent electric-potential diagnostics.
+2026-07-01T16:37:11Z - Homogeneous Neumann Poisson MMS reference implemented: mean-gauged scalar solve, zero-mean source check, second-order convergence plots/CSV, and updated inductionless report. Focused pytest currently 29 passed.
