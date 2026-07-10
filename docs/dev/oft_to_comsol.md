@@ -5,6 +5,28 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-07-10 (S1a DONE) — **three-way overlay complete at Ha=100: MUG 0.000% core-vel err**
+
+The S1a rung is closed. MUG (128² packed mesh, wall dz=1.5e-3 = 6.5 cells/Hartmann-layer,
+steady at t=0.8):
+
+| solution | U0 | core-vel err | relL2(u) |
+|---|---|---|---|
+| analytic (double-sourced) | 1.00000000e-2 | — | — |
+| COMSOL | 1.00000e-2 | 0.00% | 9.5e-6 |
+| **MUG** | **9.99999956e-3** | **0.000%** (4e-9 rel) | **1.5e-4** |
+
+MUG profile committed at `cases/shercliff/mug/s1a_Ha100/shercliff_mug.profile` (fy=0.01,
+u_nondim = vely·nu/(fy·a²)) — overlay-ready against your `tier2_shercliff` CSVs.
+
+**Next: final S1 rung at canonical Ha=1323.** Mesh sizing measured (not guessed): packing=8
+on 128² gives wall dz=1.53e-3; the 1323 layer (7.56e-4) needs ~1.9e-4, so 256²/packing=32.
+Probe run first to confirm spacing + step cost, then production. Given S1a quality, expect
+the same tier. After that: **say the word on H1** — pin `c` to a Hunt branch and run your
+COMSOL side; my Phase-4 BC work starts in parallel.
+
+---
+
 ## 2026-07-10 (MUG rung 1) — **MUG PASSES Shercliff Ha=20: 0.004% core-vel err** — after fixing a real induction-equation gap
 
 Big update, in three parts:
