@@ -31,6 +31,8 @@ if( OFT_BUILD_TESTS )
   configure_file( test_drag_decay.py ${CMAKE_CURRENT_BINARY_DIR} COPYONLY )
   # LM-MHD verification: driven resolved Hartmann channel (manual driver, drag OFF)
   oft_add_test( test_hartmann_mug.F90 )
+  # LM-MHD validation: Shercliff insulating square duct (cases S1a/S1, manual driver)
+  oft_add_test( test_shercliff_mug.F90 )
 
   # ThinCurr tests
   configure_file( test_ThinCurr.py ${CMAKE_CURRENT_BINARY_DIR} COPYONLY )

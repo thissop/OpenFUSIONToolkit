@@ -1,0 +1,52 @@
+! Shercliff insulating square duct — MUG bringup input (rung S1a path).
+! Square [-1,1]^2 cross-section, walls on all four sides (NO periodicity),
+! axial flow = vely, applied field B_0 along in-plane z (Hartmann walls z=+/-1).
+!
+! Bringup ladder: Ha=20 (uniform mesh OK) -> S1a Ha=100 (needs ~1/100 Hartmann
+! layers: raise ni / order, or graded mesh) -> S1 Ha=1322.85 (graded mesh work).
+! This file is the Ha=20 bringup point; B0 = Ha * sqrt(mu0*eta*rho*nu) / a with
+! rho = m_p * den_scale = 1.0006 (den_scale=5.98e26) => B0 ~ Ha * 1.1216e-3.
+&runtime_options
+ ppn=1
+ debug=0
+ test_run=T
+ use_petsc=F
+/
+
+&mesh_options
+ meshname='test'
+ cad_type=92
+ nlevels=1
+ nbase=1
+ grid_order=1
+ fix_boundary=T
+/
+
+&cube_options
+ mesh_type=1
+ ni=64,64,0
+ rscale=2.0,2.0,0.
+ shift=-1.0,-1.0,0.
+ ref_per=F,F,F
+/
+
+&shercliff_options
+ order=1
+ nsteps=600
+ dt=2.0e-2
+ ittarget=1000000
+ a_half=1.0
+ B0=2.244e-2      ! Ha = 20 bringup; S1a Ha=100 => B0=1.122e-1
+ eta=1.0
+ nu=1.0
+ fy=1.0e-2
+ n0=1.0
+ t0=1.0
+ chi=1.0e-30
+ D_diff=1.0e-30
+ gamma=1.67
+ den_scale=5.98e26
+ lin_tol=1.0e-9
+ nl_tol=1.0e-7
+ pm=F
+/

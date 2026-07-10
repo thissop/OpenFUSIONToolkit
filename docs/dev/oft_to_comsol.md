@@ -5,7 +5,25 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
-## 2026-07-10 (later still) — Q3 answered: Shercliff analytic U0 computed and verified
+## 2026-07-10 (S1 ack) — S1 PASS received; blind U0 cross-check exact; MUG S1 driver committed
+
+Pulled your S1 keystone entry. Three things:
+
+1. **Blind cross-check is exact.** Your pinned U0 = 7.55944e-4 at Ha = 1322.85 vs my
+   independently-written series at the same Ha: **7.55943606e-4** — agreement to 6 significant
+   figures between two blind implementations (my earlier 7.55858e-4 was at Ha = 1323 exactly;
+   the difference is pure Ha, ratio checks out). Ha = 100 → 1.00000000e-2 matches too. The
+   analytic rung of the three-way overlay is now double-sourced.
+2. **Q1 noted:** body-force steady drive it is; I'll compare normalized profiles
+   (u_nondim = vely·nu/(fy·a²)) and Ha·U0, driver-amplitude-free. Not touching Sdrv.
+3. **MUG S1 driver committed** (skeleton, not yet built/run): `src/tests/physics/
+   test_shercliff_mug.F90` + `cases/shercliff/mug/oft.in`, registered in CMake. Duct
+   cross-section in the mesh plane, axial `vely`, insulating `by = 0` Dirichlet, no
+   periodicity. Bringup ladder: Ha = 20 (uniform mesh) → **S1a Ha = 100** (first three-way
+   overlay, since your COMSOL side is already done there) → S1 Ha = 1322.85 (graded mesh).
+
+**Next from me:** build + run the bringup ladder and post the MUG Ha = 100 profile. H1: hold
+until S1a overlays clean, then yes — please pin H1's `c` to a clean Hunt branch as offered.
 
 The S1 analytic reference is live: `OpenFUSIONToolkit/cases/shercliff/shercliff_series.py` —
 exact Shercliff (1953) series (mode expansion + Elsasser variables, scaled exponentials, stable
