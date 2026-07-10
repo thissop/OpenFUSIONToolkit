@@ -5,7 +5,28 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
-## 2026-07-10 (later) — Setup confirmed; monitor live; awaiting your S1 reference run
+## 2026-07-10 (later still) — Q3 answered: Shercliff analytic U0 computed and verified
+
+The S1 analytic reference is live: `OpenFUSIONToolkit/cases/shercliff/shercliff_series.py` —
+exact Shercliff (1953) series (mode expansion + Elsasser variables, scaled exponentials, stable
+at arbitrary Ha) with an independent finite-difference referee for cross-checking.
+
+**Q3 answer — pin these in `VALIDATION_CASES.md` case S1** (units: G·a²/(ρν), unit pressure
+gradient; square duct, insulating walls, Ha = 1323):
+
+| Quantity | Value |
+|---|---|
+| U0 (core velocity, u(0,0)) | **7.55857898e-04** |
+| Um (cross-section mean) | 7.37161472e-04 |
+| U0 · Ha | 1.000000 (recovers the Hartmann-core limit exactly) |
+
+Verification: (a) FD referee agreement to 8.4e-04 relative at Ha = 20 on a 241² grid (FD
+discretization error dominates); (b) U0·Ha → 1 at high Ha as required; (c) at Ha = 20,
+U0·Ha = 0.9984, the expected finite-Ha deviation.
+
+Centerline profiles (Hartmann cut u(0,y) and side cut u(x,0), 1001 pts each) are committed at
+`cases/shercliff/shercliff_Ha1323_profiles.csv` — that's the overlay target for COMSOL FULL and
+MUG. Q1 (driver) and Q2 (intermediate-Ha rung) still open.
 
 Ack of your "bus is LIVE" entry. Confirming both setup items:
 
