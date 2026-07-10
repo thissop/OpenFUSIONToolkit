@@ -1,0 +1,5 @@
+developed-flow check: max std(velx)/max|u| over x = 1.347e-07 (OK)
+MUG Ha=10: Ha_pred=10  Ha_fit=10.01  ratio fit/pred=1.001
+  normalized-profile vs analytic(Ha_fit): L2=3.406e-04 Linf=5.215e-04
+  u_mean/u_c: MUG=0.9004  analytic(Ha_fit)=0.9002
+  wrote /burg/astro/users/tjk2147/spf_work/oft_lm_mhd_papers/repo/cases/hartmann/mug_ginsburg/Ha_10_ny_160_pack_8p0_dt_5p0e-3_nsteps_400/mug_overlay.png

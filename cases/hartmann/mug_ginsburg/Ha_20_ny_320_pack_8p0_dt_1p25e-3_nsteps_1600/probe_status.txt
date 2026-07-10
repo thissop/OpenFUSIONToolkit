@@ -1,0 +1,3 @@
+mug_probe_status=PASS
+case_dir=/burg/astro/users/tjk2147/spf_work/oft_lm_mhd_papers/repo/cases/hartmann/mug_ginsburg/Ha_20_ny_320_pack_8p0_dt_1p25e-3_nsteps_1600
+timestamp_utc=2026-07-10T01:52:52Z

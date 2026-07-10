@@ -1,0 +1,14 @@
+timestamp_utc=2026-07-10T02:28:29Z
+hostname=g198
+job_id=8911505
+repo_dir=/burg/astro/users/tjk2147/spf_work/oft_lm_mhd_papers/repo
+build_dir=/burg/astro/users/tjk2147/spf_work/oft_lm_mhd_papers/repo/builds/build_release
+case_dir=/burg/astro/users/tjk2147/spf_work/oft_lm_mhd_papers/repo/cases/hartmann/mug_ginsburg/Ha_20_ny_320_pack_8p0_dt_6p25e-4_nsteps_3200
+ha=20
+ny=320
+packing=8.0
+nsteps=3200
+dt=6.25e-4
+executable=/burg/astro/users/tjk2147/spf_work/oft_lm_mhd_papers/repo/builds/build_release/tests/physics/test_hartmann_mug
+OMP_NUM_THREADS=8
+OPENBLAS_NUM_THREADS=8

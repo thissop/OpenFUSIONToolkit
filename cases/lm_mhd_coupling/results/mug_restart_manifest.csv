@@ -1,0 +1,11 @@
+name,shape,dtype,size,finite,min,max,max_abs
+OFT_idx_Version,1,int32,1,True,1.0,1.0,1.0
+U_T,644,float64,644,True,1.0,1.0,1.0
+U_by,644,float64,644,True,0.0,0.0,0.0
+U_n,644,float64,644,True,1.0,1.0,1.0
+U_psi,644,float64,644,True,0.0,0.0,0.0
+U_velx,644,float64,644,True,0.0,0.0,0.0
+U_vely,644,float64,644,True,0.0,0.0,0.0
+U_velz,644,float64,644,True,0.0,0.0,0.0
+dt,1,float64,1,True,0.02,0.02,0.02
+t,1,float64,1,True,0.0,0.0,0.0

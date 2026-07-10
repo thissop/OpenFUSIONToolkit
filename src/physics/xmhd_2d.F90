@@ -100,6 +100,17 @@ TYPE, public :: oft_xmhd_2d_sim
   !    pressure-gradient and viscous terms). Constant => no Jacobian contribution.
   LOGICAL :: use_body_force = .FALSE. !< Enable uniform body-force momentum source
   REAL(r8) :: body_force(3) = [0.d0,0.d0,0.d0] !< Body force per unit mass [accel units]
+  !--- Conducting-wall (Robin) EM boundary condition for psi: LM-MHD STUB, default off.
+  !    Typed entry point for future Hunt/Shercliff conducting-wall duct cases. The intended
+  !    Robin condition on the poloidal flux at the wall is  psi + c_wall*d(psi)/dn = 0, with
+  !    c_wall = sigma_w*t_w/(sigma_f*a) the wall-conductance ratio (wall conductivity*thickness
+  !    over fluid conductivity*half-width). c_wall = 0.d0 is the present default and leaves all
+  !    behaviour unchanged: this component is currently UNUSED (not read by setup_bc, the
+  !    residual, or the Jacobian). The mapping of the c_wall limits to insulating vs conducting
+  !    walls depends on the psi sign / EM-BC convention (the insulating Hartmann case on this
+  !    branch uses the natural d(psi)/dn=0 wall condition) and must be settled before wiring;
+  !    see the design note in deliverables/lm_mhd_for_yuchen/OFT_LM_MHD_state_and_roadmap.md.
+  REAL(r8) :: c_wall = 0.d0 !< Wall-conductance ratio for conducting-wall Robin psi BC (STUB, unused)
   LOGICAL, CONTIGUOUS, POINTER, DIMENSION(:) :: n_bc => NULL() !< n BC flag
   LOGICAL, CONTIGUOUS, POINTER, DIMENSION(:) :: velx_bc => NULL() !< vel BC flag
   LOGICAL, CONTIGUOUS, POINTER, DIMENSION(:) :: vely_bc => NULL() !< vel BC flag

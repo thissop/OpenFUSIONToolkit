@@ -1,0 +1,11 @@
+Ha=50.0
+ny=500
+packing=8.0
+nsteps=5000
+dt=2.0e-4
+fx=1.0e-2
+den_scale=5.980000000000e+26
+rho=1.000227910367e+00
+B0=5.605629897811e-02
+hartmann_layer_thickness=2.000000000000e-02
+nominal_wall_cells_per_layer=5.000000

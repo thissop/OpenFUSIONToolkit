@@ -1,0 +1,3 @@
+material,representative_velocity,representative_field,representative_ha,representative_re,representative_interaction,representative_rm,representative_feedback,representative_classification,fraction_low,fraction_drag-important,fraction_two-way-candidate,fraction_full-induction-candidate
+PbLi,0.19549661430912604,5.053156929689541,5464.868655539986,54304.615085868354,549.9493804546847,0.009826731637043644,0.0004965601706792653,drag-important,0.0,0.90234375,0.09765625,0.0
+Li,0.19549661430912604,5.053156929689541,21305.980362776365,10860.92301717367,41796.15291455604,0.039306926548174574,0.001986240682717061,two-way-candidate,0.0,0.65484375,0.19515625,0.15

@@ -100,6 +100,30 @@ class CouplingSnapshot:
         return snap.current_density[:, 1].copy()
 
 
+def structured_snapshot_current_grid(snapshot: CouplingSnapshot) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    '''Return `(r, z, current)` if snapshot points form a complete R-Z grid.
+
+    The returned current array has shape `(nz, nr, 3)` and is sorted by
+    increasing `z`, then increasing `r`. This is a postprocessing convenience
+    for diagnostics; unstructured coupling projections should use the snapshot
+    points and weights directly.
+    '''
+
+    snap = snapshot.validated()
+    r = np.unique(snap.points_rz[:, 0])
+    z = np.unique(snap.points_rz[:, 1])
+    if r.size * z.size != snap.points_rz.shape[0]:
+        raise ValueError("snapshot points do not form a complete structured R-Z grid")
+    order = np.lexsort((snap.points_rz[:, 0], snap.points_rz[:, 1]))
+    expected_r, expected_z = np.meshgrid(r, z, indexing="xy")
+    sorted_points = snap.points_rz[order]
+    expected_points = np.column_stack((expected_r.ravel(), expected_z.ravel()))
+    if not np.allclose(sorted_points, expected_points, rtol=1.0e-12, atol=1.0e-14):
+        raise ValueError("snapshot points do not form a complete structured R-Z grid")
+    current = snap.current_density[order].reshape(z.size, r.size, 3)
+    return r, z, current
+
+
 @dataclass(frozen=True)
 class FeedbackMetrics:
     '''Reduced field-feedback metrics from axisymmetric toroidal currents.

@@ -1,0 +1,3 @@
+Wrote plasma/LM sheath-load scan to cases/lm_mhd_coupling/results
+$ /opt/homebrew/Caskroom/miniconda/base/bin/python /Users/tkiker/Documents/GitHub/OpenFUSIONToolkit/cases/lm_mhd_coupling/plasma_interface_sheath_scan.py
+

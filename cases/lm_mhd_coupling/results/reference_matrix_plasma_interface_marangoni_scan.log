@@ -1,0 +1,3 @@
+Wrote plasma/LM thermocapillary scan to cases/lm_mhd_coupling/results
+$ /opt/homebrew/Caskroom/miniconda/base/bin/python /Users/tkiker/Documents/GitHub/OpenFUSIONToolkit/cases/lm_mhd_coupling/plasma_interface_marangoni_scan.py
+

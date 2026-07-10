@@ -1,0 +1,8 @@
+metric,value
+max_abs_phi_error,3.587120256162e-07
+rms_phi_error,1.334503255281e-07
+max_abs_current_error,5.389864053129e-07
+rms_current_error,3.273081793776e-07
+max_abs_divJ,2.259835688578e-07
+rms_divJ,1.661713906938e-07
+max_wall_normal_current,5.389864053129e-07

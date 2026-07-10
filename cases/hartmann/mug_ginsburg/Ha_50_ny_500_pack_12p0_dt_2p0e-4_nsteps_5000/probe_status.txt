@@ -1,0 +1,4 @@
+mug_probe_status=FAIL
+stage=run
+run_status=99
+case_dir=/burg/astro/users/tjk2147/spf_work/oft_lm_mhd_papers/repo/cases/hartmann/mug_ginsburg/Ha_50_ny_500_pack_12p0_dt_2p0e-4_nsteps_5000

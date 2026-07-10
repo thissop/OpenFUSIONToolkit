@@ -1,0 +1,149 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{amsmath}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{microtype}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  urlcolor=blue,
+  citecolor=blue
+}
+
+\title{Summary of Autonomous LM-MHD Verification and Diagnostic Work}
+\author{OpenFUSIONToolkit branch \texttt{lm-mhd-upgrades}}
+\date{Prepared July 2, 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This document summarizes the LM-MHD work performed so far in this branch. The work spans resolved Hartmann and Hunt verification exercises, reduced Hartmann drag-closure infrastructure, two-way magnetic feedback triage, inductionless current-closure reference utilities, axisymmetric power and boundary-current audits, reusable \texttt{CouplingSnapshot} handoff diagnostics, probe-sensitivity and regime-priority maps, artifact manifests, and a reduced full-induction bridge that checks the low magnetic Reynolds number limit against the inductionless current formulation. The intent throughout was to maximize scientific and computational honesty. Results are labeled as resolved benchmark reproductions, analytic references, manufactured-solution diagnostics, reduced triage models, or handoff-file audits as appropriate. No new result is presented as MUG validation or as a coupled TokaMaker/MUG plasma-blanket solve unless that calculation was actually performed.
+\end{abstract}
+
+\section{Scope and Scientific Position}
+
+The work was motivated by the need to understand and improve the liquid-metal MHD capability surrounding OpenFUSIONToolkit, especially for blanket-relevant regimes where Lorentz forces, Hartmann layers, wall-current closure, and possible plasma feedback all interact. The scope deliberately separated resolved solver verification from reduced diagnostic infrastructure. Resolved Hartmann verification was treated as a benchmark-learning exercise against analytic solutions and OpenFOAM, while the later coupling work was treated as Python-side reference infrastructure and red-team diagnostics rather than as claims of new MUG physics.
+
+The most important scientific distinction in the work is the distinction between full induction and inductionless LM-MHD. Full induction is the parent model and is more general. The inductionless or quasi-static model is an asymptotic reduction that is appropriate only when the magnetic Reynolds number is small and induced magnetic fields are correspondingly small compared with the imposed field. The work therefore did not treat inductionless modeling as automatically superior. Instead, it built current-closure, power, and boundary-current checks in the inductionless limit, then added a full-induction bridge showing when the full model collapses to the same current in a controlled low-\(R_m\) setting.
+
+The latest focused validation command covered the Python LM-MHD coupling, closure, feedback, inductionless, and full-induction-bridge tests. The measured result was \texttt{53 passed}. The latest \texttt{git diff --check} was clean. Key PNG artifacts were checked with PIL for nonblank image content. Per the latest project instruction, no new commit was made in the most recent continuation; changes were left uncommitted for review.
+
+\section{Resolved Hartmann and Hunt Verification}
+
+The resolved benchmark work reproduced the classic insulating-wall Hartmann channel using three independent legs: the analytic Hartmann profile, resolved MUG through \texttt{xmhd\_2d.F90}, and OpenFOAM \texttt{mhdFoam}. The reduced wall-drag closure remained off throughout this verification, because the physical point of the exercise was to resolve the Hartmann layer directly rather than model it by an unresolved closure. The analytic and OpenFOAM legs covered Hartmann numbers \(Ha \in \{1,5,10,20,50\}\). The resolved MUG leg was confirmed at \(Ha \in \{2,3,5\}\), with higher-Hartmann-number MUG attempts limited by uniform-mesh cost and solver stiffness rather than by a claimed physics failure.
+
+For the insulating Hartmann channel, OpenFOAM agreed with the analytic solution at roughly the \(10^{-3}\) level in normalized profile metrics across the sweep. The discriminating scalar \(u_{\mathrm{mean}}/u_c\) tracked the analytic transition from the near-Poiseuille low-\(Ha\) regime toward the high-\(Ha\) plug-core regime. The resolved MUG leg matched the analytic profile at approximately \(10^{-4}\) profile error for the confirmed \(Ha=2,3,5\) cases, and the Hartmann number fitted from the computed MUG profile agreed with the Hartmann number predicted from the input parameters to within about \(0.1\%\). That comparison was an important geometry and scaling check because it independently tied the input field strength, resistivity, density, viscosity, and channel half-width to the observed Hartmann profile.
+
+The MUG Hartmann setup required a default-off uniform body-force momentum source in \texttt{src/physics/xmhd\_2d.F90}. This was introduced as \texttt{use\_body\_force = .FALSE.} with a three-component \texttt{body\_force} vector, and it is inert when disabled. It was used only to drive the fully developed channel verification. Regression tests for the default-off state were reported as unchanged, with \texttt{test\_alfven\_2d}, \texttt{test\_sound\_2d}, and \texttt{test\_drag\_decay} giving 21 passed and 36 skipped during that verification block.
+
+The Hunt conducting-wall duct work was treated honestly as an analytic/numerical reference rather than as a completed MUG run. The reference used a finite-difference solve of Hunt's inductionless duct equations for perfectly conducting Hartmann walls and insulating side walls. It reproduced the characteristic side jets, with the mid-plane peak-to-centerline ratio growing from nearly unity at \(Ha=5\) to roughly \(9.6\) at \(Ha=50\). A MUG Hunt run was not attempted because it requires a different out-of-plane axial-flow geometry and conducting Hartmann-wall electromagnetic boundary conditions; attempting it during the unattended pass would have risked an unproductive debug spiral.
+
+\section{Reduced Hartmann Drag Closure Infrastructure}
+
+An effective-drag closure infrastructure was added under \texttt{OpenFUSIONToolkit.LM\_MHD.closures}. The closure utilities cover Hartmann-layer thickness, cells per Hartmann layer, resolution classification, mean-flow effective drag for an insulating Hartmann channel, perpendicular and parallel velocity projection, implicit drag update, and drag-power diagnostics. The purpose was not to replace resolved Hartmann verification. It was to provide a controlled unresolved-layer infrastructure for full-device settings where resolving \(a/Ha\) Hartmann layers everywhere is computationally unrealistic.
+
+The closure scan under \texttt{cases/lm\_mhd\_coupling} generated CSV and smplotlib-styled PNG artifacts for Hartmann layer resolution, effective drag coefficient behavior, and validity regions. The associated documentation clearly labels this as analytic and reduced-model infrastructure. It states that reduced drag is appropriate for underresolved full-device runs, while standalone channel benchmarks should resolve the Hartmann layer directly whenever feasible.
+
+\section{Two-Way Magnetic Feedback Triage}
+
+Two-way plasma/liquid-metal coupling was treated as regime-dependent rather than automatically dominant. Axisymmetric circular-loop Biot-Savart utilities were added to estimate the poloidal magnetic perturbation produced by toroidal current density stored in a \texttt{CouplingSnapshot}. The feedback diagnostics compute integrated toroidal current, absolute current, current centroid, probe-field perturbations, normalized \(|\delta B|/|B_{\mathrm{ref}}|\), and a planning classification. The baseline manufactured current patch with peak \(J_\phi = 10^5\,\mathrm{A/m^2}\) gave a maximum feedback ratio of \(2.576\times 10^{-3}\), which was labeled \texttt{two-way-candidate}.
+
+The \texttt{CouplingSnapshot} schema and HDF5 roundtrip were used as the handoff format for later diagnostics. The schema stores \(R,Z\) points, \(R,\phi,Z\) current-density components, time, optional region identifiers, optional cell volumes, and metadata. The feedback logic uses axisymmetric cell volumes to recover poloidal area weights through \(dA = dV/(2\pi R)\), which is the weight needed for \(J_\phi dA\) circular-loop feedback estimates. This convention was tested directly.
+
+The feedback interpretation was deliberately conservative. Ratios much smaller than \(10^{-3}\) support one-way imposed-field studies as a first pass. Ratios around or above \(10^{-3}\) indicate that coupled sensitivity studies are worth preserving. Ratios around \(10^{-2}\) are stronger prompts for a reverse magnetic coupling path. These thresholds were used as planning conventions rather than validation criteria.
+
+\section{Inductionless Reference Infrastructure}
+
+A substantial Python reference layer was added in \texttt{OpenFUSIONToolkit.LM\_MHD.inductionless}. It pins down the sign convention
+\[
+J = \sigma(-\nabla\phi + u \times B), \qquad f = J \times B, \qquad q_J = \frac{|J|^2}{\sigma}.
+\]
+The module includes Ohm-law current reconstruction, Lorentz force, Joule heating, structured gradients, motional electric fields, divergence diagnostics, streamfunction-generated divergence-free currents, wall-normal current extrema, and finite-difference Poisson solvers for scalar electric-potential references.
+
+The reference infrastructure was expanded through a sequence of manufactured-solution problems. Dirichlet Poisson MMS verified second-order convergence for a smooth sine solution. Homogeneous Neumann MMS verified a mean-gauge solve for a cosine solution. Nonzero Neumann wall-data MMS verified outward-normal derivative plumbing. A full constant-conductivity inductionless MMS solved \(\nabla^2\phi = \nabla\cdot(u\times B)\) with insulating wall data and reconstructed a target divergence-free current. Smooth variable-conductivity and two-region conductivity-jump references tested coefficient handling and interface flux behavior. Variable-conductivity Neumann and full current-closure references extended these checks toward material-interface and insulating-wall conditions.
+
+Finite-element style weak-form prototypes were also added as non-invasive Python references. A Cartesian Q1 weak-form prototype verified the scalar sign and gauge convention. A face-aligned two-region Q1 prototype verified conservative interface flux recovery across a conductivity jump. An axisymmetric Q1 prototype added the \(R\) metric to the weak form. These references were intentionally kept outside the Fortran solver so that signs, gauges, interface fluxes, and manufactured targets could be stabilized before any production field-structure change.
+
+An offline CSV postprocessor was added to reconstruct current, divergence, wall-normal current, and optional target-current errors from structured exported fields. A MUG restart/readiness manifest was also generated to identify which fields are currently available from restart/profile artifacts and what is missing for a future current-closure handoff. That manifest reported useful limitations, including absent coordinates and absent electric potential in the inspected outputs.
+
+\section{Axisymmetric Inductionless Feedback and Loop Voltage}
+
+The axisymmetric current path was extended with \(\psi(R,Z)\)-based divergence-free poloidal current, axisymmetric divergence checks, wall-normal current checks, and reconstruction of
+\[
+J = \sigma(-\nabla\phi + u\times B + E_\phi e_\phi).
+\]
+The explicit toroidal electric field is important because \(J_\phi\) is the component that produces poloidal magnetic perturbations in the circular-loop feedback estimate. A constant-\(E_\phi\) diagnostic and a loop-voltage diagnostic were added. The loop-voltage form uses
+\[
+E_\phi(R) = \frac{V_{\mathrm{loop}}}{2\pi R}.
+\]
+
+For the selected constant-\(E_\phi\) case with \(E_\phi = 0.02\,\mathrm{V/m}\), representative \(\sigma_0 = 8\times 10^5\,\mathrm{S/m}\), and \(B_\phi=5\,\mathrm{T}\), the diagnostic reported total toroidal current \(1.599\times 10^4\,\mathrm{A}\), maximum \(|\delta B|/|B_{\mathrm{ref}}| = 1.656\times 10^{-3}\), and classification \texttt{two-way-candidate}. For the selected loop-voltage case with \(V_{\mathrm{loop}}=0.2\,\mathrm{V}\), it reported total toroidal current \(1.756\times 10^4\,\mathrm{A}\), maximum \(|\delta B|/|B_{\mathrm{ref}}| = 1.909\times 10^{-3}\), and the same \texttt{two-way-candidate} classification.
+
+A loop-voltage and conductivity threshold scan estimated when the manufactured feedback metric crosses planning thresholds. For the PbLi-like row nearest \(\sigma_0=8\times 10^5\,\mathrm{S/m}\), the \(10^{-3}\) two-way threshold occurred near \(V_{\mathrm{loop}}=1.046\times 10^{-1}\,\mathrm{V}\). The stronger \(10^{-2}\) threshold was not reached up to \(V_{\mathrm{loop}}=1\,\mathrm{V}\) in that row. This result was explicitly labeled as a reduced manufactured scan and not a design prediction.
+
+\section{Global Power, Torque, and Current Closure Audits}
+
+To make the axisymmetric current diagnostics harder to fool, global power and torque utilities were added. The volume weight is \(dV=2\pi R\,dR\,dZ\). Mechanical power density is \(p_{\mathrm{mech}} = f\cdot u\), electrical power density is \(p_{\mathrm{elec}}=J\cdot E\), Joule power density is \(q_J=|J|^2/\sigma\), and torque density about the symmetry axis is \(\tau_{\mathrm{axis}} = R f_\phi\). The selected constant-\(E_\phi\) case gave integrated Joule power \(3.022\times 10^3\,\mathrm{W}\), integrated mechanical power \(2.969\,\mathrm{W}\), integrated electric power \(3.025\times 10^3\,\mathrm{W}\), and net axisymmetric torque \(9.311\,\mathrm{N\,m}\). The selected loop-voltage case gave integrated Joule power \(3.513\times 10^3\,\mathrm{W}\), integrated mechanical power \(-4.551\times 10^{-1}\,\mathrm{W}\), integrated electric power \(3.513\times 10^3\,\mathrm{W}\), and the same net torque for this manufactured field set.
+
+The pointwise inductionless power identity
+\[
+q_J + (J\times B)\cdot u - J\cdot E = 0
+\]
+was added as a sign-convention audit. The selected constant-\(E_\phi\) and loop-voltage cases closed this identity to integrated residuals of order \(10^{-14}\,\mathrm{W}\), with pointwise maximum residuals of order \(10^{-13}\,\mathrm{W/m^3}\). This is a useful check because it ties together Joule heating, Lorentz mechanical work, and electrical or loop-voltage input. A future MUG handoff with electric field information should be checked against the same identity.
+
+Signed outward boundary-current integrals were also added. Radial surfaces use \(2\pi R\,dZ\), while top and bottom surfaces use \(2\pi R\,dR\). Both selected axisymmetric manufactured cases reported zero max integrated boundary current and zero net integrated boundary current. This conservative leakage audit is separate from the structured-gradient divergence residual and from pointwise wall-normal current extrema.
+
+\section{CouplingSnapshot Audit and Sensitivity Tools}
+
+A reusable \texttt{CouplingSnapshot} audit script was added. It reads a current handoff HDF5 file, computes reduced feedback metrics, infers a structured \(R,Z\) grid when possible, checks cell-volume consistency against \(2\pi R\,dR\,dZ\), computes axisymmetric divergence, computes pointwise wall-normal current extrema, and computes signed boundary-current leakage. On the default loop-voltage snapshot, the audit detected an \(81\times 65\) grid, recovered maximum \(|\delta B|/|B_{\mathrm{ref}}|=1.909\times 10^{-3}\), classified the snapshot as \texttt{two-way-candidate}, found zero cell-volume relative error, and found zero integrated boundary leakage.
+
+A probe-sensitivity scan was added as a red-team check on the circular-loop feedback metric. It varied probe side, offset from the current annulus, and loop-field regularization. For the loop-voltage snapshot, the default-like inboard row reported maximum \(|\delta B|/|B_{\mathrm{ref}}|=1.968\times 10^{-3}\). The strongest row was \(2.047\times 10^{-3}\), the weakest row was \(2.361\times 10^{-4}\), half of the rows crossed the \(10^{-3}\) planning threshold, and none crossed \(10^{-2}\). This makes the two-way priority plausible but not universal.
+
+A B-U regime-priority map was added to scan representative PbLi and Li over velocity and magnetic-field ranges. With the default length, sheet thickness, and closure factor, the representative PbLi point near \(U=0.2\,\mathrm{m/s}\) and \(B=5\,\mathrm{T}\) was classified \texttt{drag-important} with feedback \(4.966\times 10^{-4}\). The representative Li point was classified \texttt{two-way-candidate} with feedback \(1.986\times 10^{-3}\). Across the scanned grid, PbLi was \texttt{drag-important} in \(90.2\%\) of rows and \texttt{two-way-candidate} in \(9.8\%\). Li was \texttt{drag-important} in \(65.5\%\), \texttt{two-way-candidate} in \(19.5\%\), and \texttt{full-induction-candidate} in \(15.0\%\). This result is one of the clearest summaries of the regime dependence of two-way coupling.
+
+\section{Full-Induction Low-\(R_m\) Bridge}
+
+In response to the concern that full induction may be more rigorous and more aligned with future LM-MHD, a reduced full-induction bridge was added. The bridge uses a prescribed parabolic 1D channel flow \(u_x(z)\), transverse imposed field \(B_0 e_z\), and induced field \(b_x(z)e_x\). The inductionless current with net streamwise current constrained to zero is \(J_y=\sigma(E_y-u_xB_0)\), where \(E_y=B_0\langle u_x\rangle\). The steady linear full-induction equation gives \(0=B_0\,du_x/dz+\eta_m\,d^2b_x/dz^2\), and Ampere's law gives \(J_y=(1/\mu_0)db_x/dz\). In this controlled geometry the full-induction current and inductionless current must match in the low-\(R_m\) limit.
+
+For the selected PbLi-like case with half-width \(a=0.05\,\mathrm{m}\), \(B_0=5\,\mathrm{T}\), \(U=0.2\,\mathrm{m/s}\), and \(\sigma=8\times10^5\,\mathrm{S/m}\), the bridge gave \(R_m=1.005\times10^{-2}\), maximum induced-field ratio \(\max |b_x|/B_0=1.290\times10^{-3}\), Ohm-versus-Ampere current relative error \(1.875\times10^{-5}\), net current integral \(-7.276\times10^{-12}\,\mathrm{A/m}\), and wall \(b_x\) mismatch \(8.186\times10^{-18}\,\mathrm{T}\). A transient magnetic-diffusion solve was also included and relaxes to the steady induced field.
+
+This bridge is the rigorous model-choice answer now present in the repository. Full induction is the parent model, and inductionless is the low-\(R_m\) asymptotic limit. For the controlled PbLi-like case, \(R_m\) is about \(10^{-2}\), the induced field is about \(10^{-3}B_0\), and the current from full-induction Ampere's law matches the inductionless current to discretization error. This does not make full induction unimportant. It says model choice must be regime-driven, and higher conductivity, larger velocity, larger length scale, transients, or nonlinear induced-field dynamics push the problem toward full induction.
+
+\section{Artifact Manifest and Reproducibility}
+
+An artifact manifest script was added to hash and inventory the generated coupling-diagnostic artifacts. The latest manifest contains 32 entries, including 9 CSV files, 14 PNG files, 2 HDF5 files, and 7 Markdown summaries. All 14 PNG files in that manifest were nonblank according to PIL image statistics. The manifest records SHA-256 hashes, byte sizes, CSV row counts, and PNG dimensions and luminance standard deviations. This does not prove physics correctness, but it makes the unattended result set easier to audit for truncation, missing files, or blank plots.
+
+The running log \path{docs/dev/lm_mhd_verification_overnight_log.md} was updated at major steps. It records when new diagnostics started, when tests passed, when scripts regenerated artifacts, when checks were clean, and when red-team sensitivity scans completed. The log also preserves earlier Hartmann and OpenFOAM verification events and the later reduced-coupling continuation events.
+
+\section{Validation State}
+
+The latest expanded focused Python validation command was run with \texttt{PYTHONDONTWRITEBYTECODE=1} and \texttt{PYTHONPATH=src/python}. It included \path{src/tests/physics/test_lm_mhd_coupling.py}, \path{src/tests/physics/test_lm_mhd_closures.py}, \path{src/tests/physics/test_lm_mhd_feedback.py}, \path{src/tests/physics/test_lm_mhd_inductionless.py}, and \path{src/tests/physics/test_lm_mhd_full_induction_bridge.py}. The measured result was \texttt{53 passed}. The latest \texttt{git diff --check} was clean. Key PNG artifacts from the full-induction bridge, loop-voltage feedback, and regime-priority diagnostics were checked and found nonblank.
+
+Earlier validation checkpoints remain recorded in the progress ledger. The focused count grew from 38 to 45, 46, 48, and finally 53 as global integrals, boundary-current checks, the \texttt{CouplingSnapshot} audit, sensitivity scans, regime maps, the power identity, and the full-induction bridge were added. The resolved Hartmann verification had its own regression statement for the default-off Fortran source changes, with 21 passed and 36 skipped for the selected legacy MUG tests.
+
+\section{Limits and Honest Non-Claims}
+
+The work does not claim to validate MUG as a whole. The Hartmann and Hunt work is a personal reproduction and cross-check of known benchmark physics. The later coupling diagnostics are analytic, manufactured, reduced, or handoff-file audits. The loop-voltage and feedback calculations do not run TokaMaker, do not solve a Grad-Shafranov equilibrium response, do not include vessel currents, and do not include plasma screening or amplification. The full-induction bridge is a 1D prescribed-flow parent-model check, not a nonlinear full-induction MUG solve.
+
+The inductionless work should be understood as asymptotic infrastructure, not as a claim that full induction is irrelevant. It is appropriate when \(R_m\) and induced-field ratios are small, and it targets the current-closure physics that matters strongly in low-\(R_m\), high-\(Ha\), high-\(N\) blanket flows. The full-induction bridge now makes this model hierarchy explicit. If future configurations move toward larger \(R_m\), stronger transients, lithium-like conductivity, larger length scales, or nonlinear induced-field dynamics, then full-induction solver work becomes more important.
+
+The two-way coupling conclusion is also not universal. PbLi-like default assumptions in the B-U map are mostly drag-important rather than reverse-feedback dominated. Loop-voltage and manufactured-current cases can cross the \(10^{-3}\) two-way-candidate threshold, but probe sensitivity shows that this depends on probe placement and regularization. The correct conclusion is that two-way coupling paths should be preserved, audited, and tested, not that every LM-MHD calculation requires a full two-way plasma response.
+
+\section{Recommended Next Work}
+
+The next high-value resolved-solver step is to improve the MUG Hartmann mesh strategy so that resolved MUG can be pushed beyond \(Ha=5\) without uniform-mesh cost exploding. A wall-normal graded mesh or boundary-layer refinement would allow more rigorous \(Ha=10\) to \(Ha=50\) resolved comparisons against the analytic and OpenFOAM legs. This is the cleanest way to strengthen the existing resolved MUG benchmark without mixing in reduced closures.
+
+The next high-value current-closure step is to connect the Python reference infrastructure to real MUG-exported fields. A robust handoff should export coordinates, velocity, magnetic field, conductivity, electric potential or electric field if available, current density, region identifiers, and cell volumes. The \texttt{CouplingSnapshot} audit, boundary-current integrals, power identity, and artifact manifest should then be run on actual solver outputs rather than only manufactured snapshots.
+
+The next high-value full-induction step is to move from the reduced 1D bridge to a controlled full-induction MUG comparison in a regime where \(R_m\) is varied systematically. The objective should be to show the transition from inductionless agreement at low \(R_m\) toward measurable induced-field effects at larger \(R_m\), while keeping geometry and boundary conditions simple enough that the result is scientifically interpretable. This would directly answer the long-term question of where full induction becomes mandatory for fusion liquid-metal blankets.
+
+The next high-value coupled-plasma step is to replace the circular-loop feedback estimate with the appropriate TokaMaker or Green's-function response machinery for the same \texttt{CouplingSnapshot} current inputs. That would convert the present triage metric into a more meaningful plasma-equilibrium sensitivity study, while retaining the same conservative current, volume, boundary, and power audits developed here.
+
+\end{document}

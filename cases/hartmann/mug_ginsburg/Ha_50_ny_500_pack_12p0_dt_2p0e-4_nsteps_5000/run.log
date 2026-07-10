@@ -1,0 +1,48 @@
+Development branch:    unknown
+Revision id:           unknown
+Abort(99) on node 0 (rank 0 in comm 0): application called MPI_Abort(MPI_COMM_WORLD, 99) - process 0
+
+#----------------------------------------------
+ERROR: Ground point repeated on same domain
+SUBROUTINE: mesh_global_igrnd
+FILE: /burg/astro/users/tjk2147/spf_work/oft_lm_mhd_papers/repo/src/grid/mesh_global_util.F90
+#----------------------------------------------
+
+#----------------------------------------------
+Open FUSION Toolkit Initialized
+Parallelization Info:
+  # of MPI tasks      =    1
+  # of NUMA nodes     =    1
+  # of OpenMP threads =    8
+Fortran input file    = oft.in
+XML input file        = none
+Integer Precisions    =    4   8
+Float Precisions      =    4   8  10
+Complex Precisions    =    4   8
+LA backend            = native
+#----------------------------------------------
+
+
+**** Loading OFT surface mesh
+  Square surface mesh:
+    Mesh Type   =    1
+    nx, ny      =    4 500
+    Scale facs  =   5.000E-01  2.000E+00
+    Periodicity =  T F
+    Packing     =   1.000E+00  1.200E+01  1.000E+00
+
+  **** Generating surface grid level  1
+    Generating boundary domain linkage
+    Mesh statistics:
+      Area         =  1.000E+00
+      # of points  =    4026
+      # of edges   =   12006
+      # of cells   =    8000
+      # of boundary points =      15
+      # of boundary edges  =      12
+      # of boundary cells  =      12
+    Resolution statistics:
+      hmin =  5.011E-04
+      hrms =  7.221E-02
+      hmax =  1.250E-01
+EXIT=99

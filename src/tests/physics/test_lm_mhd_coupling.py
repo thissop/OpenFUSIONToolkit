@@ -16,6 +16,7 @@ try:
         representative_liquid_metals,
         reynolds_number,
         sheet_delta_b,
+        structured_snapshot_current_grid,
         write_coupling_snapshot,
     )
 except FileNotFoundError:
@@ -44,6 +45,7 @@ except FileNotFoundError:
     representative_liquid_metals = coupling.representative_liquid_metals
     reynolds_number = coupling.reynolds_number
     sheet_delta_b = coupling.sheet_delta_b
+    structured_snapshot_current_grid = coupling.structured_snapshot_current_grid
     write_coupling_snapshot = coupling.write_coupling_snapshot
 
 
@@ -102,6 +104,38 @@ def test_hdf5_snapshot_roundtrip(tmp_path):
     np.testing.assert_allclose(out.toroidal_current_density(), snap.current_density[:, 1])
     assert out.time == pytest.approx(snap.time)
     assert out.metadata["schema_version"] == "lm_mhd_coupling_snapshot_v0"
+
+
+def test_structured_snapshot_current_grid_sorts_shuffled_points():
+    r = np.array([1.0, 1.5, 2.0])
+    z = np.array([-0.25, 0.25])
+    r_grid, z_grid = np.meshgrid(r, z, indexing="xy")
+    current = np.zeros(r_grid.shape + (3,))
+    current[..., 0] = r_grid
+    current[..., 1] = 2.0 * z_grid
+    current[..., 2] = r_grid + z_grid
+    order = np.array([4, 0, 5, 2, 1, 3])
+    snap = CouplingSnapshot(
+        points_rz=np.column_stack((r_grid.ravel(), z_grid.ravel()))[order],
+        current_density=current.reshape(-1, 3)[order],
+        time=0.0,
+    )
+
+    out_r, out_z, out_current = structured_snapshot_current_grid(snap)
+
+    np.testing.assert_allclose(out_r, r)
+    np.testing.assert_allclose(out_z, z)
+    np.testing.assert_allclose(out_current, current)
+
+
+def test_structured_snapshot_current_grid_rejects_incomplete_grid():
+    snap = CouplingSnapshot(
+        points_rz=np.array([[1.0, 0.0], [1.5, 0.0], [1.0, 0.5]]),
+        current_density=np.zeros((3, 3)),
+        time=0.0,
+    )
+    with pytest.raises(ValueError, match="structured"):
+        structured_snapshot_current_grid(snap)
 
 
 def test_snapshot_rejects_inconsistent_shapes():

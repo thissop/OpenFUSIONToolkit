@@ -1,0 +1,7 @@
+metric,value
+max_abs_current,6.288227646727e-02
+max_abs_divJ_interior,5.551115123126e-16
+rms_divJ_interior,1.239533573453e-16
+max_wall_normal_current,8.706143445059e-18
+max_abs_current_error,6.938893903907e-18
+rms_current_error,1.566052596338e-18

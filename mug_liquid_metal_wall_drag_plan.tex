@@ -1,0 +1,1336 @@
+\documentclass[11pt,letterpaper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{tabularx}
+
+\hypersetup{colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue}
+
+\lstset{
+  language=Fortran,
+  basicstyle=\small\ttfamily,
+  keywordstyle=\bfseries\color{blue!70!black},
+  commentstyle=\itshape\color{gray},
+  stringstyle=\color{orange!80!black},
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  frame=single,
+  breaklines=true,
+  captionpos=b
+}
+
+\title{\textbf{Liquid-Metal MHD in MUG/OFT:\\
+Capabilities, Comparison, Improvement Roadmap,\\
+and Multi-Physics Coupling Game Plan}\\
+\large OpenFUSIONToolkit --- Commit \texttt{5faae9a} and beyond}
+
+\author{Prepared for: Sophia Guizzo and OFT Maintainers\\
+Compiler: Claude Code (repository-grounded analysis)}
+
+\date{Repository state: \texttt{main}, HEAD \texttt{5faae9ad698c2014afbe35b4ab837a6d1482b6b1}\\
+Analysis date: 2026-05-08}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+%==============================================================================
+\section{Abstract}
+%==============================================================================
+
+The OpenFUSIONToolkit (OFT) MHD solver MUG has recently been extended with a
+2D/axisymmetric module (\texttt{xmhd\_2d.F90}, commit \texttt{5faae9a}).  This
+module solves the compressible, resistive, viscous MHD equations in two
+spatial dimensions (either Cartesian or cylindrical $R$--$Z$) for seven coupled
+fields: number density $n$, velocity components $(v_x, v_y, v_z)$, temperature
+$T$, in-plane magnetic flux $\psi$, and out-of-plane field $B_y$.  The
+implementation is complete for basic plasma physics and is validated against
+Alfv\'{e}n and sound-wave benchmarks.
+
+According to a recent APS DPP poster (Guizzo, Columbia University), an
+axisymmetric MUG implementation has been developed for coupled plasma and
+liquid-metal blanket dynamics, with TokaMaker providing the evolving plasma
+equilibrium.  This poster capability maps partially onto the current
+\texttt{main} branch: TokaMaker has a one-way equilibrium export
+(\texttt{save\_mug()}) and a point-wise field interpolator, while
+\texttt{xmhd\_2d.F90} has full cylindrical $R$--$Z$ support.  However,
+liquid-metal-specific physics (wall drag, Hartmann friction, conducting-wall
+BCs, low-Rm formulation), the plasma--blanket feedback path, and a MUG Python
+interface are all absent from \texttt{main}.
+
+This document (1) surveys what MUG can already do, (2) maps the APS poster
+capabilities onto the repository, (3) compares MUG to peer liquid-metal MHD
+codes, (4) presents a physics improvement roadmap ranked by impact and effort,
+(5) analyses the existing and missing multi-physics coupling infrastructure, and
+(6) proposes a sequenced game plan of pull requests from first drag term to
+full plasma--blanket coupling.
+
+%==============================================================================
+\section{Executive Summary}
+%==============================================================================
+
+\begin{enumerate}[label=\textbf{ES-\arabic*.}]
+  \item \texttt{xmhd\_2d.F90} (commit \texttt{5faae9a}) provides a
+    production-quality 2D MHD solver with uniform scalar viscosity $\nu$,
+    resistivity $\eta$, thermal diffusivity $\chi$, and particle diffusivity
+    $D$.  Cylindrical $R$--$Z$ coordinates are enabled via \texttt{cyl\_flag}
+    throughout all hot paths.
+
+  \item \textbf{No wall-drag, Hartmann-friction, Shercliff-layer, traction BC,
+    or liquid-metal-specific terms exist anywhere in the repository.}  The APS
+    poster feature is partially visible (cylindrical flag, TokaMaker equilibrium
+    export), but the wall-physics code, material-specific closures, and
+    plasma--blanket feedback loop are absent from \texttt{main}.
+
+  \item Compared to peer codes, MUG's 2D module is solving harder equations
+    than necessary for liquid metals: the full compressible induction equation
+    with Alfv\'{e}nic timestep constraint, when Rm $\ll 1$ and Ma $\ll 1$ for
+    all engineering liquid-metal conditions.  The most impactful single upgrade
+    is a \textbf{low-Rm electric potential solver mode} that replaces the
+    induction equation with a Poisson solve and allows timesteps 10$^2$--10$^3\times$
+    larger.
+
+  \item \textbf{Seven physics improvements} can be implemented without
+    architectural changes, ordered by effort-to-impact:
+    (1)~gravity/buoyancy, (2)~ohmic+viscous heating, (3)~density/temperature
+    floors, (4)~SM82 Hartmann+Shercliff friction from $\mathrm{Ha}$, (5)~conducting-wall
+    Robin BC on $\psi$, (6)~low-Rm electric potential mode, (7)~port of 3D
+    anisotropic viscosity and regional resistivity.
+
+  \item The multi-physics coupling infrastructure is \textbf{partially present}:
+    TokaMaker has a one-way HDF5 equilibrium export to MUG and a live field
+    interpolator; ThinCurr has cross-model electromagnetic coupling; the
+    TokaMaker--TORAX temporal coupling loop in \texttt{pulse\_design.py} is the
+    architectural template.  The missing pieces are: a MUG Python API, a live
+    $\mathbf{B}_0$ injection path from TokaMaker's interpolator into MUG, and a
+    $\mathbf{J}_{\mathrm{blanket}} \to$ TokaMaker feedback interface.
+
+  \item The \textbf{recommended game plan is eight sequenced PRs} from the
+    minimal Hartmann drag term (PR~1) through full bidirectional plasma--blanket
+    coupling (PR~8), with each step independently useful and testable.
+\end{enumerate}
+
+%==============================================================================
+\section{Repository and Commit State (Code-Confirmed Facts)}
+%==============================================================================
+
+\subsection{Git Provenance}
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\textbf{Item} & \textbf{Value} \\
+\midrule
+Branch & \texttt{main} \\
+HEAD & \texttt{5faae9ad698c2014afbe35b4ab837a6d1482b6b1} \\
+Parent & \texttt{5e6ea6283ba0b88690df59859b4cafce63d04088} \\
+Commit type & \texttt{commit} (verified via \texttt{git cat-file -t 5faae9a}) \\
+Working tree & Clean (only \texttt{CLAUDE.MD} untracked) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Commit 5faae9a: Files Added and Modified}
+
+Commit \texttt{5faae9a} (``MUG: Add 2D implementation \#216'') was authored by
+samuel-frei and co-authored by Sophia Guizzo (\texttt{@sguizzo}), Shreyas
+Seethalla (\texttt{@KasaiYuki}), and Chris Hansen (\texttt{@hansec}).  The
+diff introduced 3{,}439 net insertions across 21 files.
+
+\textbf{New files added:}
+\begin{itemize}
+  \item \texttt{src/physics/xmhd\_2d.F90} --- 1{,}812 lines, the 2D MHD module
+  \item \texttt{src/examples/MUG/harris\_sheet/\{CMakeLists.txt, harris\_sheet.F90, oft.in, oft\_in.xml\}}
+  \item \texttt{src/tests/physics/\{test\_alfven\_2d.F90, test\_alfven\_2d.py, test\_sound\_2d.F90, test\_sound\_2d.py\}}
+\end{itemize}
+
+\textbf{Modified files (significant):}
+\begin{itemize}
+  \item \texttt{src/base/oft\_io.F90} (+55) --- I/O extensions
+  \item \texttt{src/fem/blag\_operators.F90} (+44) --- new Lagrange operators
+  \item \texttt{src/fem/fem\_utils.F90} (+28) --- FEM utilities
+  \item \texttt{src/physics/diagnostic.F90} (+29) --- diagnostic output
+  \item \texttt{src/physics/oft\_scalar\_inits.F90} (+68) --- scalar initialisation
+  \item \texttt{src/lin\_alg/\{lin\_alg\_base.F90, native\_la.F90\}} --- linear algebra
+  \item \texttt{src/grid/mesh\_cube.F90} (+15) --- structured mesh support
+\end{itemize}
+
+%==============================================================================
+\section{APS DPP Poster Context (Poster-Sourced Facts)}
+%==============================================================================
+
+The APS DPP poster titled ``Flexible, Axisymmetric MHD Solver for Coupled
+Plasma and Liquid Metal Dynamics'' (presenter: Sophia Guizzo, Columbia
+University) reports the following capabilities:
+
+\begin{enumerate}
+  \item An \textbf{axisymmetric} implementation of MUG within OFT solving the
+    \textbf{visco-resistive compressible MHD equations} with high geometric
+    fidelity.
+  \item Coupling of axisymmetric MUG with \textbf{TokaMaker}, the 2D
+    time-dependent plasma equilibrium solver.
+  \item The coupling computes \textbf{current distribution and flow profile in
+    the blanket} due to time-evolving magnetic fields.
+  \item Blanket response \textbf{feeds back on concurrent plasma evolution}.
+  \item Application to \textbf{disruption impact on blanket fluid} and whether
+    blanket response alters plasma dynamics.
+\end{enumerate}
+
+\textbf{Mapping to repository (code-confirmed):}
+
+\begin{center}
+\begin{longtable}{p{0.45\textwidth}p{0.5\textwidth}}
+\toprule
+\textbf{Poster Claim} & \textbf{Repository Status} \\
+\midrule
+Axisymmetric MUG & \textbf{Confirmed partially.}  \texttt{cyl\_flag} in
+  \texttt{oft\_xmhd\_2d\_sim} (line~71) enables cylindrical $R$--$Z$
+  coordinates throughout \texttt{nlfun\_apply} and \texttt{build\_approx\_jacobian}. \\
+\addlinespace
+Visco-resistive compressible MHD & \textbf{Confirmed.} $\nu$, $\eta$, $\chi$,
+  $D$, $\gamma$ are all implemented. \\
+\addlinespace
+TokaMaker coupling (one-way) & \textbf{Confirmed.} \texttt{save\_mug()} in
+  \texttt{TokaMaker/\_core.py} (line~1905) exports equilibrium (mesh, $B_R$,
+  $B_T$, $B_Z$, $P$, $\psi$) as HDF5 via \texttt{gs\_save\_mug} in
+  \texttt{grad\_shaf.F90} (lines 4851--4939). \\
+\addlinespace
+TokaMaker live field access & \textbf{Confirmed.} \texttt{TokaMaker\_field\_interpolator}
+  (\texttt{\_core.py} line~2606) evaluates $\mathbf{B}$, $\psi$, $P$, $\nabla\mathbf{B}$
+  at arbitrary $(R,Z)$ points. \\
+\addlinespace
+Blanket material properties & \textbf{Not found.} No liquid-metal density,
+  conductivity, or viscosity parameters specific to PbLi or liquid lithium. \\
+\addlinespace
+Current distribution in blanket & \textbf{Not found.} No region-specific
+  conductivity or blanket geometry in \texttt{xmhd\_2d.F90}. \\
+\addlinespace
+Plasma--blanket feedback loop & \textbf{Not found.} No coupled simulation
+  driver in \texttt{main}; feedback path MUG $\to$ TokaMaker is absent. \\
+\addlinespace
+Disruption transients & \textbf{Not found.} No disruption-specific examples or
+  input files for liquid-metal channels. \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\textbf{Conclusion:} The axisymmetric visco-resistive MHD infrastructure is
+present; the one-way TokaMaker equilibrium export works.  Liquid-metal
+material closures, wall-drag physics, and the plasma--blanket feedback loop
+are absent from \texttt{main} or unreleased.
+
+%==============================================================================
+\section{Current MUG 2D/Axisymmetric Architecture (Code-Confirmed Facts)}
+%==============================================================================
+
+\subsection{Module Overview}
+
+File: \texttt{src/physics/xmhd\_2d.F90} (1{,}812 lines)\\
+Module name: \texttt{xmhd\_2d}\\
+FEM basis: Lagrange scalar elements (\texttt{oft\_blagrange}) on 2D boundary meshes
+
+\subsection{Primary Derived Type: \texttt{oft\_xmhd\_2d\_sim}}
+
+Lines 69--124.  Key fields:
+
+\begin{center}
+\begin{tabular}{llll}
+\toprule
+\textbf{Field} & \textbf{Default} & \textbf{Units} & \textbf{Line} \\
+\midrule
+\texttt{nu} & $-1$ & m$^2$/s (kinematic viscosity) & 83 \\
+\texttt{eta} & --- & $\mu_0 \cdot \Omega\cdot\text{m}$ (resistivity) & 92 \\
+\texttt{chi} & $-1$ & m$^2$/s (thermal diffusivity) & 82 \\
+\texttt{D\_diff} & $-1$ & m$^2$/s (particle diffusivity) & 85 \\
+\texttt{gamma} & $2/3$ & --- (adiabatic index) & 84 \\
+\texttt{den\_scale} & $10^{19}$ & m$^{-3}$ (density normalisation) & 87 \\
+\texttt{m\_i} & $m_p$ & kg (ion mass) & 88 \\
+\texttt{k\_boltz} & $e$ (eV mode) & J/K & 86 \\
+\texttt{B\_0(3)} & $[0,0,0]$ & T (background field) & 91 \\
+\texttt{cyl\_flag} & \texttt{.FALSE.} & --- & 71 \\
+\texttt{linear} & \texttt{.FALSE.} & --- & 72 \\
+\texttt{timestep\_cn} & \texttt{.FALSE.} & --- & 73 \\
+\texttt{dt} & $-1$ & s & 79 \\
+\texttt{nsteps} & $-1$ & --- & 74 \\
+\texttt{nl\_tol} & $10^{-5}$ & --- & 90 \\
+\texttt{lin\_tol} & $10^{-8}$ & --- & 89 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Evolved Fields (7 total)}
+
+The solution vector $\mathbf{u}$ contains seven scalar fields at every Lagrange
+node:
+
+\begin{center}
+\begin{tabular}{cll}
+\toprule
+\textbf{Index} & \textbf{Field tag} & \textbf{Physical meaning} \\
+\midrule
+1 & \texttt{n} & number density \\
+2 & \texttt{velx} & $v_x$ (or $v_R$ in cylindrical) \\
+3 & \texttt{vely} & $v_y$ (or $v_Z$ in cylindrical) \\
+4 & \texttt{velz} & $v_z$ (toroidal/out-of-plane) \\
+5 & \texttt{T} & temperature \\
+6 & \texttt{psi} & in-plane magnetic flux function \\
+7 & \texttt{by} & out-of-plane magnetic field \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The velocity triplet $(v_x, v_y, v_z)$ on a 2D mesh gives a \textbf{2.5D}
+formulation: all fields depend on only two spatial coordinates, but
+three vector components are retained.
+
+\subsection{Governing Equations}
+
+The module solves (in Cartesian notation; cylindrical adds metric factors at
+\texttt{cyl\_flag} branches):
+
+\begin{align}
+\frac{\partial n}{\partial t} + \nabla\cdot(n\mathbf{v}) &= D\nabla^2 n
+\label{eq:continuity} \\
+m_i n\left(\frac{\partial \mathbf{v}}{\partial t}
+  + \mathbf{v}\cdot\nabla\mathbf{v}\right)
+  &= \mathbf{J}\times\mathbf{B}
+    - \nabla(2nk_BT)
+    + \nu\nabla^2\mathbf{v}
+    + \nu\frac{\nabla n}{n}\cdot\nabla\mathbf{v}
+\label{eq:momentum} \\
+\frac{n}{\gamma-1}\left(\frac{\partial T}{\partial t}
+  + \mathbf{v}\cdot\nabla T\right)
+  &= -nT\nabla\cdot\mathbf{v}
+    + \chi\nabla^2 T
+    - \chi\frac{\nabla n}{n}\cdot\nabla T
+\label{eq:energy} \\
+\frac{\partial\psi}{\partial t} + \mathbf{v}\cdot\nabla\psi
+  &= \eta\nabla^2\psi - (\mathbf{B}_0\times\mathbf{v})_y
+\label{eq:psi} \\
+\frac{\partial B_y}{\partial t}
+  &= \eta\nabla^2 B_y + [\nabla\times(\nabla\psi\times\mathbf{v})]_y
+\label{eq:by}
+\end{align}
+
+\subsection{3D XMHD: Physics Present in 3D But Missing in 2D}
+
+The 3D \texttt{xmhd.F90} has all of the following, none of which have been
+ported to \texttt{xmhd\_2d.F90}:
+
+\begin{itemize}
+  \item \texttt{nu\_par}, \texttt{nu\_perp} --- anisotropic (field-aligned) viscosity
+  \item \texttt{eta\_reg(:)} --- per-region resistivity scale factors
+  \item \texttt{eta\_temp} --- Spitzer-profile temperature-dependent resistivity
+  \item \texttt{eta\_hyper} --- hyper-resistivity
+  \item Hall term: $(1/ne)(\mathbf{J}\times\mathbf{B} - \nabla nkT_e)$
+  \item Two-temperature model (\texttt{xmhd\_two\_temp})
+  \item Braginskii anisotropic thermal conductivity (\texttt{xmhd\_brag})
+  \item Ohmic heating $\eta J^2$ (\texttt{xmhd\_ohmic})
+  \item Viscous heating (\texttt{xmhd\_visc\_heat})
+  \item Gravity (\texttt{g\_accel})
+  \item Density and temperature floors (\texttt{den\_floor}, \texttt{temp\_floor})
+\end{itemize}
+
+%==============================================================================
+\section{Comparison with Existing Liquid-Metal MHD Codes}
+%==============================================================================
+
+\subsection{The Peer Landscape}
+
+\begin{center}
+\begin{longtable}{p{0.13\textwidth}p{0.13\textwidth}p{0.12\textwidth}p{0.12\textwidth}p{0.14\textwidth}p{0.27\textwidth}}
+\toprule
+\textbf{Code} & \textbf{Group} & \textbf{Rm} & \textbf{Compress.} & \textbf{Geometry} & \textbf{Wall physics} \\
+\midrule
+\textbf{HIMAG} & UCLA (Moreau) & Low-Rm (inductionless, $\varphi$ form.) & Incompressible & 3D unstructured FEM & Conducting-wall BCs, arbitrary $c_w$ \\
+\addlinespace
+\textbf{HiMag} & UCLA (Smolentsev) & Low-Rm & Incompressible & 3D structured FVM, RANS & Wall functions, Ha $\sim10^4$ \\
+\addlinespace
+\textbf{PTOLEMY} & Pothérat group & Low-Rm & Incompressible & \textbf{2D quasi-2D (SM82)} & Hartmann + Shercliff friction \\
+\addlinespace
+\textbf{OpenFOAM-MHD} & Community & Low-Rm ($\varphi$ form.) & Incompressible & 3D unstructured FVM & Basic no-slip \\
+\addlinespace
+\textbf{SFEMANS} & Guermond--Léorat & Full Rm & Both & Axisymmetric + Fourier & Limited \\
+\addlinespace
+\textbf{MUG xmhd} & OFT (Hansen) & \textbf{Full Rm} & \textbf{Compressible} & 3D unstructured FEM & No-slip Dirichlet only \\
+\addlinespace
+\textbf{MUG xmhd\_2d} & OFT (Guizzo) & \textbf{Full Rm} & \textbf{Compressible} & 2D/axisymmetric FEM & No-slip Dirichlet only \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\subsection{The Two Core Mismatches for Liquid Metals}
+
+\subsubsection{Magnetic Reynolds Number}
+
+For engineering liquid metals, Rm $= \mu_0 \sigma v L$ is very small:
+
+\begin{center}
+\begin{tabular}{llll}
+\toprule
+\textbf{Material} & $\sigma$ (S/m) & $v$ (m/s) & Rm at $L = 0.1$ m \\
+\midrule
+Liquid lithium (500\,K) & $3.0\times10^6$ & 0.1 & $\approx 4\times10^{-2}$ \\
+PbLi (623\,K) & $7.5\times10^5$ & 0.1 & $\approx 9\times10^{-3}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+At Rm $\ll 1$, the magnetic field is barely perturbed by the flow.  Solving
+MUG's full induction equations~\eqref{eq:psi}--\eqref{eq:by} is physically
+correct but wasteful: the Alfv\'{e}n speed sets the timestep, but the
+Alfv\'{e}n crossing time is $\sim 10^3$--$10^5\times$ shorter than the
+flow timescale.  This forces far more timesteps than the physics requires.
+All peer codes except SFEMANS avoid this by adopting the \textbf{inductionless
+(electric-potential) approximation}: the induced field is negligible, so one
+solves a scalar Poisson equation for electric potential $\varphi$ instead.
+
+\subsubsection{Mach Number and Compressibility}
+
+Liquid-metal flow speeds are $v \sim 0.01$--$1$\,m/s; the sound speed in
+liquid lithium is $c_s \approx 4{,}500$\,m/s, giving Ma $\sim 10^{-4}$.  The
+acoustic timestep constraint $\Delta t \lesssim \Delta x / c_s$ forces steps
+many orders of magnitude smaller than necessary to resolve the actual flow.
+All peer codes use incompressible formulations and avoid this entirely.
+
+\subsection{What MUG Has That Peer Codes Do Not}
+
+\begin{itemize}
+  \item \textbf{Full Rm capability:} MUG can handle Alfv\'{e}nic and
+    electromagnetic timescales that low-Rm codes cannot.  This is essential
+    for the plasma side of the coupled problem (where Rm $\sim 1$--$10$) and
+    for regimes where the induced field in the liquid metal is not entirely
+    negligible.
+
+  \item \textbf{Unstructured FEM:} Enables complex axisymmetric blanket
+    geometries with port openings, curved walls, and field-shaping inserts
+    without mapping to a structured grid.
+
+  \item \textbf{Newton--Krylov solver:} Implicit nonlinear time-stepping with
+    block-Jacobi preconditioner scales to stiff problems with large variations
+    in timescale.
+
+  \item \textbf{Native OFT integration:} Shares mesh, I/O, and basis
+    infrastructure with TokaMaker and ThinCurr, enabling future tight coupling
+    without format translation.
+
+  \item \textbf{Cylindrical 2.5D:} Out-of-plane field and velocity components
+    on a 2D mesh capture toroidal flows and poloidal currents without full 3D,
+    which is the natural geometry for a tokamak blanket.
+\end{itemize}
+
+\subsection{PTOLEMY as the Closest Analogue}
+
+PTOLEMY (Sommeria--Moreau quasi-2D model) is the best comparison target for
+MUG's 2D module.  It is 2D, incompressible, and uses the SM82 model to
+represent unresolved Hartmann and Shercliff layers as volume friction.  MUG's
+2D module with the improvements in Section~\ref{sec:roadmap} would be:
+\begin{itemize}
+  \item \textbf{More general:} unstructured mesh vs.\ PTOLEMY's structured grid;
+    full 2.5D field evolution vs.\ 2D vorticity stream-function.
+  \item \textbf{Equally tractable:} same 2D solve on similar mesh sizes.
+  \item \textbf{Plasma-coupled:} directly tied to TokaMaker for the evolving
+    background field, which PTOLEMY has no mechanism for.
+\end{itemize}
+
+%==============================================================================
+\section{Existing Liquid-Metal / Blanket Capabilities (Code-Confirmed Facts)}
+%==============================================================================
+
+A systematic keyword search across all \texttt{.F90}, \texttt{.py},
+\texttt{.in}, \texttt{.xml}, and \texttt{.md} files returned \textbf{zero
+matches} for: \texttt{liquid}, \texttt{lithium}, \texttt{lead},
+\texttt{blanket}, \texttt{PbLi}, \texttt{Hartmann}, \texttt{Shercliff},
+\texttt{drag}, \texttt{friction}, \texttt{conducting.wall}.
+
+\textbf{Conclusion:} At \texttt{main} HEAD there is no liquid-metal-specific
+physics.  MUG's equations are physically correct for a conducting fluid, but no
+blanket material parameters, Hartmann or Shercliff friction models,
+wall-conductivity treatments, or plasma--blanket coupling loops are implemented.
+
+%==============================================================================
+\section{Physics Improvement Roadmap}
+\label{sec:roadmap}
+%==============================================================================
+
+The following improvements are ordered by the ratio of physics impact to
+implementation effort.  None requires architectural changes to MUG's solver
+structure; all fit within the existing Newton--Krylov, Lagrange-FEM framework.
+
+\subsection{Group A: Port Physics from 3D \texttt{xmhd.F90} (Low Effort)}
+
+These features are already implemented and validated in the 3D module.
+Porting to \texttt{xmhd\_2d.F90} is primarily transcription with cylindrical
+metric factors.
+
+\subsubsection{A1. Gravity and Boussinesq Buoyancy ($\sim$20 lines)}
+
+The 3D module has a \texttt{g\_accel} field.  Add to the momentum residual:
+\begin{equation}
+  \mathbf{S}_g = m_i n \mathbf{g}\left[1 - \beta_T(T - T_{\mathrm{ref}})\right]
+\end{equation}
+where $\beta_T$ is the thermal expansion coefficient.  This unlocks
+magnetoconvection problems: Rayleigh--B\'{e}nard convection in a magnetic
+field, natural convection in a heated blanket channel.  Standard validation
+benchmarks exist (Burr \& M\"{u}ller 2001, Auth\'{e}i et al.\ 2003).
+
+\subsubsection{A2. Ohmic and Viscous Heating ($\sim$15 lines)}
+
+Add to the temperature residual:
+\begin{equation}
+  Q_{\mathrm{ohm}} = \eta J^2, \qquad
+  Q_{\mathrm{visc}} = \frac{1}{2}(\nabla\mathbf{v})^T : \Pi
+\end{equation}
+Critical for disruption scenarios where large induced currents deposit ohmic
+heat in the blanket.
+
+\subsubsection{A3. Density and Temperature Floors ($\sim$10 lines)}
+
+Add \texttt{den\_floor} and \texttt{temp\_floor} guards to prevent
+negative density or temperature near sharp interfaces or shocks.
+The 3D module has these; they cost nothing computationally.
+
+\subsubsection{A4. Temperature-Dependent Resistivity ($\sim$20 lines)}
+
+The 3D module implements Spitzer profile $\eta(T) \propto T^{-3/2}$.  For
+liquid metals a linear metallic model $\eta(T) = \eta_0(1 + \alpha_\eta(T-T_0))$
+is more appropriate.  The infrastructure (user-switchable profile function)
+is what matters.
+
+\subsubsection{A5. Anisotropic Viscosity Port ($\sim$30 lines)}
+
+Port \texttt{nu\_par}, \texttt{nu\_perp} from the 3D module.  The viscous
+stress tensor becomes:
+\begin{equation}
+  \Pi = -\left[\nu_\parallel \hat{b}\hat{b}
+              + \nu_\perp(I - \hat{b}\hat{b})\right] : W
+\end{equation}
+Important for magnetoconvection and magnetically aligned flow in blanket channels.
+
+\subsection{Group B: SM82 Quasi-2D Wall Drag (Medium Effort)}
+\label{sec:sm82}
+
+The Sommeria--Moreau (1982) quasi-2D model is the standard reduced
+representation of unresolved Hartmann and Shercliff boundary layers.  It
+replaces thin-layer physics with two volumetric friction terms:
+
+\begin{equation}
+  \mathbf{S}_{u}^{(\mathrm{SM82})} =
+  -\underbrace{\alpha_H n \mathbf{v}_\perp}_{\text{Hartmann walls}}
+  - \underbrace{\alpha_S n \mathbf{v}}_{\text{Shercliff walls}}
+\end{equation}
+
+where, in dimensional form:
+\begin{align}
+  \alpha_H &= \frac{\sigma B^2}{\rho} \cdot \frac{1}{\mathrm{Ha}}
+            = \frac{\nu \,\mathrm{Ha}}{L^2}
+  \label{eq:alpha_H} \\
+  \alpha_S &\approx \alpha_H \cdot \mathrm{Ha}^{-1/2}
+            = \frac{\nu \,\mathrm{Ha}^{1/2}}{L^2}
+  \label{eq:alpha_S}
+\end{align}
+
+and $\mathrm{Ha} = BL\sqrt{\sigma/(\rho\nu)}$.
+
+\textbf{Implementation:} Add three input parameters to \texttt{oft\_xmhd\_2d\_sim}:
+\texttt{hartmann\_number} (Ha), \texttt{wall\_spacing} ($L$),
+\texttt{B0\_direction} (unit vector parallel to $\mathbf{B}$).  Compute
+$\alpha_H$ and $\alpha_S$ at setup.  The residual addition is the same as
+Option~A/B in Section~\ref{sec:impl_options} but with physically derived
+coefficients and directional selectivity.
+
+\textbf{Comparison:} This is precisely the model used by PTOLEMY.  With this
+addition, MUG's 2D module becomes PTOLEMY-comparable for quasi-2D liquid-metal
+flows, with the advantage of unstructured mesh and OFT's plasma coupling.
+
+\subsection{Group C: Conducting-Wall Robin BC on $\psi$ (Medium Effort)}
+
+Realistic tokamak blankets have conducting walls.  The wall conductance ratio:
+\begin{equation}
+  c_w = \frac{\sigma_w t_w}{\sigma_f L}
+\end{equation}
+modifies the effective Hartmann number and the current closure condition.
+The magnetic BC on $\psi$ at a conducting wall changes from Dirichlet
+($\psi = 0$, insulating) to Robin:
+\begin{equation}
+  \psi + c_w \frac{\partial\psi}{\partial n} = 0 \quad \text{on wall}
+  \label{eq:robin_psi}
+\end{equation}
+
+\textbf{Implementation:} Requires adding a boundary-face quadrature loop and
+integrating the traction term in the $\psi$ residual --- the one missing
+weak-form infrastructure piece in \texttt{xmhd\_2d.F90}.
+
+\textbf{Validation:} Hunt (1965) analytic solution for duct flow with
+conducting walls is the canonical benchmark.  This makes MUG directly
+comparable to HIMAG for the conducting-wall case.
+
+\subsection{Group D: Low-Rm Electric Potential Mode (Medium-to-Large Effort, Highest Payoff)}
+\label{sec:low_rm}
+
+This is the single most impactful upgrade for liquid-metal physics.
+When Rm $\ll 1$:
+
+\begin{enumerate}
+  \item The applied field $\mathbf{B}_0$ is prescribed (from TokaMaker or
+    analytically).
+  \item Solve for electric potential $\varphi$:
+    \begin{equation}
+      \nabla\cdot(\sigma\nabla\varphi) = \nabla\cdot(\mathbf{v}\times\mathbf{B}_0)
+      \label{eq:phi_poisson}
+    \end{equation}
+  \item Compute current:
+    $\mathbf{J} = \sigma(-\nabla\varphi + \mathbf{v}\times\mathbf{B}_0)$
+  \item Add Lorentz force $\mathbf{J}\times\mathbf{B}_0$ to momentum.
+\end{enumerate}
+
+This \textbf{replaces the stiff induction equations}~\eqref{eq:psi}--\eqref{eq:by}
+with one scalar Poisson solve, reducing the field count from 7 to 5 and
+removing the Alfv\'{e}nic timestep constraint.  Practical speedup for
+liquid-metal conditions: $10^2$--$10^3\times$ larger $\Delta t$.
+
+\textbf{Implementation:} New solver mode \texttt{use\_low\_rm = .TRUE.} in
+\texttt{oft\_xmhd\_2d\_sim}.  The $\varphi$ field uses the same Lagrange
+FEM basis as the existing fields.  The Poisson operator is simpler than the
+existing induction Jacobian.  Boundary condition: Neumann
+($\mathbf{J}\cdot\hat{n} = 0$) at insulating walls, or Robin for conducting
+walls (same $c_w$ parameter as in Sec.\ C).
+
+\textbf{Coupling advantage:} With this mode, MUG does not evolve its own
+magnetic field at all --- it reads $\mathbf{B}_0(t)$ from TokaMaker's field
+interpolator at each step.  This is the natural interface for TokaMaker coupling
+(Section~\ref{sec:coupling_roadmap}).
+
+\textbf{Comparison:} HIMAG and HiMag both use exactly this formulation.
+With Group~D implemented, MUG's 2D module becomes directly comparable to HIMAG
+for the inductionless regime.
+
+\subsection{Group E: Regional Material Properties (Larger Effort)}
+
+Port \texttt{eta\_reg(:)} from 3D \texttt{xmhd.F90} and extend to a general
+per-element material map for $\nu$, $\eta$, $\rho$, $\sigma$.  This enables
+simultaneous simulation of plasma and liquid-metal domains with different
+material properties and a physical interface condition.  This is necessary for
+the full multi-material blanket geometry but is not required for the initial
+coupling studies where MUG is run in the blanket region only.
+
+\subsection{Summary Table}
+
+\begin{center}
+\begin{longtable}{p{0.22\textwidth}p{0.08\textwidth}p{0.08\textwidth}p{0.25\textwidth}p{0.27\textwidth}}
+\toprule
+\textbf{Improvement} & \textbf{Effort} & \textbf{Lines} & \textbf{Physics gain} & \textbf{Comparable to} \\
+\midrule
+A1. Gravity/buoyancy & Low & $\sim$20 & Magnetoconvection & HIMAG, Burr \& Müller \\
+A2. Ohmic+viscous heating & Low & $\sim$15 & Disruption energy balance & 3D xmhd \\
+A3. Floors & Low & $\sim$10 & Robustness & 3D xmhd \\
+A4. $\eta(T)$ profile & Low & $\sim$20 & Metallic resistivity & 3D xmhd \\
+A5. Anisotropic viscosity & Low & $\sim$30 & Magnetically aligned flow & 3D xmhd \\
+B. SM82 drag (Ha-based) & Medium & $\sim$60 & Quasi-2D LM flow & PTOLEMY \\
+C. Conducting-wall Robin BC & Medium & $\sim$100 & Hunt channel benchmark & HIMAG \\
+D. Low-Rm $\varphi$ mode & Medium-large & $\sim$400 & Full LM physics, $10^{2-3}\times \Delta t$ & HIMAG, HiMag \\
+E. Regional materials & Large & $\sim$300+ & Multi-material domains & All 3D codes \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+%==============================================================================
+\section{Physics Model Hierarchy for Wall Drag}
+%==============================================================================
+
+\subsection{Tier 1: Viscous No-Slip Wall Drag}
+
+\textbf{Is it already captured?}  The default BC in \texttt{setup\_bc}
+(lines~$\approx$1602--1611) applies zero Dirichlet velocity at all boundary
+nodes, enforcing no-slip.  However, the viscous Hartmann layer thickness
+$\delta_\nu \sim L/\mathrm{Ha}$ at engineering Ha $\sim 10^3$--$10^4$ is
+$10^{-3}$--$10^{-4} L$ --- almost never resolved at blanket scale.
+
+\subsection{Tier 2: Quasi-2D Hartmann Friction}
+(Recommended first addition --- see Section~\ref{sec:sm82})
+
+\begin{equation}
+  \mathbf{S}_{u}^{(H)} = -\alpha_H\, m_i n\, \mathbf{v}_\perp, \qquad
+  \alpha_H = \frac{\sigma B^2}{m_i n}
+  \label{eq:hartmann_drag}
+\end{equation}
+
+Valid for Ha $\gg 1$, quasi-2D flow.  Modelling Hartmann layers without
+resolving them.
+
+\subsection{Tier 3: Shercliff-Layer Side-Wall Drag}
+
+\begin{equation}
+  \mathbf{S}_{u}^{(S)} = -\beta_S\, m_i n\, \mathbf{v}, \qquad
+  \beta_S \propto \frac{\nu}{L^2}\,\mathrm{Ha}^{1/2}
+\end{equation}
+
+Can be combined with Tier~2 into the SM82 model.
+
+\subsection{Tier 4: Conducting-Wall Electromagnetic Coupling}
+
+Wall conductivity $\sigma_w$ modifies the current closure condition
+(Robin BC on $\psi$, Eq.~\eqref{eq:robin_psi}) and the effective Ha.
+Implemented via \texttt{thin\_wall.F90} in 3D; a 2D analogue is needed.
+
+\subsection{Tier 5: Fully Resolved 3D Hartmann Layers}
+
+Requires mesh spacing $\lesssim \delta_H = L/\mathrm{Ha}$, anisotropic
+wall-normal meshing, 3D geometry, and Alfv\'{e}nic timestep.  Tractable only
+at low Ha and small domains.  Not a near-term target.
+
+%==============================================================================
+\section{Does Wall Drag Require Going Fully 3D?}
+%==============================================================================
+
+\begin{center}
+\begin{longtable}{p{0.48\textwidth}p{0.48\textwidth}}
+\toprule
+\textbf{Scenario} & \textbf{Sufficient approach} \\
+\midrule
+Disruption-induced blanket flow, azimuthal symmetry, unresolved layers &
+  2D axisymmetric + SM82 friction \\
+\addlinespace
+Same with Hartmann layers partially resolved at moderate Ha &
+  2D axisymmetric with fine wall-normal mesh \\
+\addlinespace
+Duct flow with rectangular cross-section, conducting side walls &
+  3D or reduced 2D duct model; axisymmetry is geometrically wrong \\
+\addlinespace
+Toroidal blanket asymmetry, field-ripple-driven 3D flow &
+  Full 3D MHD \\
+\addlinespace
+Hartmann layer resolved to $\delta_H$ &
+  3D with wall-normal anisotropic mesh \\
+\addlinespace
+Plasma--blanket feedback, disruption timescale &
+  2D axisymmetric + TokaMaker coupling sufficient for a first study \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\textbf{Recommendation:} Prefer 2D axisymmetric with SM82 friction for all
+first-generation blanket studies.  Full 3D becomes necessary only for
+intrinsically 3D duct geometries, resolved Hartmann layers, or toroidal
+asymmetry.
+
+%==============================================================================
+\section{Multi-Physics Coupling Infrastructure: Current State}
+\label{sec:coupling_current}
+%==============================================================================
+
+\subsection{What Exists Today (Code-Confirmed)}
+
+\subsubsection{TokaMaker $\to$ MUG: One-Way Equilibrium Export (Operational)}
+
+\begin{itemize}
+  \item \textbf{Fortran:} \texttt{gs\_save\_mug} in \texttt{src/physics/grad\_shaf.F90}
+    (lines 4851--4939)
+  \item \textbf{C wrapper:} \texttt{tokamaker\_save\_mug} in
+    \texttt{src/python/wrappers/tokamaker\_f.F90} (line~1669)
+  \item \textbf{Python:} \texttt{TokaMaker.save\_mug(filename)} in
+    \texttt{TokaMaker/\_core.py} (lines~1905--1911) and
+    \texttt{TokaMaker\_equil.save\_mug()} (lines~3012--3022)
+  \item \textbf{Data transferred:} HDF5 file with mesh ($R$, $Z$), toroidal
+    field ($B_R$, $B_T$, $B_Z$), pressure $P$, poloidal flux $\psi$
+  \item \textbf{Mechanism:} Snapshot at a fixed time; one call per equilibrium state
+\end{itemize}
+
+\subsubsection{TokaMaker Live Field Interpolation (Operational)}
+
+\begin{itemize}
+  \item \textbf{Python class:} \texttt{TokaMaker\_field\_interpolator} in
+    \texttt{TokaMaker/\_interface.py} (lines~253--291)
+  \item \textbf{Core method:} \texttt{get\_field\_eval()} in \texttt{\_core.py}
+    (lines~2606--2628)
+  \item \textbf{Fortran bindings:} \texttt{tokamaker\_get\_field\_eval},
+    \texttt{tokamaker\_apply\_field\_eval} (\texttt{\_interface.py}
+    lines~161--167)
+  \item \textbf{Fields available:} $\mathbf{B}$ (3-vector), $\psi$, $F$, $P$,
+    $\nabla\psi$, $\nabla B_r$, $\nabla B_t$, $\nabla B_z$ at arbitrary $(R,Z)$
+  \item \textbf{Status:} This is the right tool for live $\mathbf{B}_0(t)$
+    injection into a low-Rm MUG solve, but no code currently connects it to MUG.
+\end{itemize}
+
+\subsubsection{ThinCurr Cross-Model Electromagnetic Coupling (Operational)}
+
+\begin{itemize}
+  \item \texttt{cross\_coupling()} in \texttt{ThinCurr/\_core.py}
+    (lines~464--480): computes mutual inductance matrix $M$ between two
+    ThinCurr models
+  \item \texttt{cross\_eval()} (lines~482--498): computes flux on model~B due
+    to currents on model~A
+  \item \textbf{Tested:} \texttt{src/tests/physics/test\_ThinCurr.py} (line~267)
+\end{itemize}
+
+\subsubsection{ThinCurr Reduced Model (Operational)}
+
+\begin{itemize}
+  \item \texttt{build\_reduced\_model()} in \texttt{ThinCurr/\_core.py}
+    (line~659): projects inductance/resistance matrices onto a reduced basis
+  \item \texttt{ThinCurr\_reduced} class (lines~684--743): stores reduced
+    operators for fast coupling
+  \item Projection utilities in \texttt{ThinCurr/meshing.py}
+    (lines~320--377): condense, expand, map between DOF representations
+\end{itemize}
+
+\subsubsection{TokaMaker--TORAX Temporal Coupling (Operational Template)}
+
+\begin{itemize}
+  \item \texttt{src/python/OpenFUSIONToolkit/TokaMaker/pulse\_design.py}
+    implements an alternating-solve loop: TokaMaker equilibrium $\leftrightarrow$
+    external transport code (TORAX)
+  \item Coupling is temporal (profiles passed at each iteration); this is the
+    architectural template for a TokaMaker--MUG coupling loop
+\end{itemize}
+
+\subsection{What Is Missing}
+
+\begin{center}
+\begin{longtable}{p{0.3\textwidth}p{0.65\textwidth}}
+\toprule
+\textbf{Missing piece} & \textbf{Description} \\
+\midrule
+MUG Python API & MUG is Fortran-only; no \texttt{ctypes}/\texttt{cffi}
+  wrapper analogous to TokaMaker or ThinCurr.  This is the single largest
+  structural gap --- without it, coupling must go through file I/O between
+  separate processes. \\
+\addlinespace
+Live $\mathbf{B}_0$ injection into MUG & TokaMaker's
+  \texttt{TokaMaker\_field\_interpolator} can supply $\mathbf{B}_0(R,Z,t)$
+  at every MUG mesh node, but no code wires it to the MUG Fortran layer. \\
+\addlinespace
+$\mathbf{J}_{\mathrm{blanket}} \to$ TokaMaker & MUG's induced currents cannot
+  feed back into the plasma equilibrium.  TokaMaker would need a
+  ``blanket-current'' input analogous to its coil-current interface, implemented
+  in \texttt{grad\_shaf.F90}. \\
+\addlinespace
+TokaMaker $\to$ ThinCurr spatial field map & TokaMaker's field interpolator
+  provides point-wise evaluation, but no kernel maps TokaMaker's $(R,Z)$ fields
+  onto ThinCurr's 3D triangular mesh for disruption wall-eddy-current analysis. \\
+\addlinespace
+ThinCurr $\to$ TokaMaker feedback & Wall eddy currents from disruptions cannot
+  modify the plasma equilibrium; no coil-equivalent input from ThinCurr into
+  TokaMaker exists. \\
+\addlinespace
+Multi-physics driver & No orchestration framework for simultaneous evolution of
+  multiple physics domains beyond the point-coupling in \texttt{pulse\_design.py}. \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\subsection{Architecture of the Complete Coupling}
+
+The full plasma--blanket--wall coupling described in the APS poster requires:
+
+\begin{verbatim}
+ ┌────────────────────────────────────────────────────────────────┐
+ │                  Python Coupling Driver                        │
+ │            (modelled after pulse_design.py)                    │
+ └──────────┬────────────────────────────────┬───────────────────┘
+            │  B0(R,Z,t)  [OPERATIONAL]      │  Jeq feedback
+            ▼  save_mug() or interpolator    │  [MISSING]
+ ┌──────────────────┐                        │
+ │    TokaMaker     │ ◄──────────────────────┘
+ │ (plasma equil.)  │
+ └──────────────────┘
+            │  B0(R,Z,t) via field interpolator
+            ▼  [OPERATIONAL; NOT YET WIRED TO MUG]
+ ┌──────────────────┐     J_blanket(R,Z,t)
+ │   MUG xmhd_2d   │ ────────────────────►  TokaMaker
+ │ (blanket flow,   │                        [MISSING]
+ │  low-Rm mode)    │
+ └──────────────────┘
+            │  B0(t) on wall mesh
+            ▼  [MISSING: TokaMaker→ThinCurr spatial map]
+ ┌──────────────────┐
+ │    ThinCurr      │
+ │  (vessel wall    │ ──► TokaMaker coil equiv.  [MISSING]
+ │   eddy currents) │
+ └──────────────────┘
+\end{verbatim}
+
+The MUG Python API is the prerequisite for everything in the bottom half of
+this diagram.
+
+%==============================================================================
+\section{Implementation Options for Wall Drag}
+\label{sec:impl_options}
+%==============================================================================
+
+\subsection{Option A: Reduced Volumetric Hartmann Friction (\textbf{Recommended First PR})}
+
+\subsubsection{Code Locations}
+
+\textbf{Step 1 --- Add parameter to simulation object} \\
+File: \texttt{src/physics/xmhd\_2d.F90}, inside \texttt{TYPE oft\_xmhd\_2d\_sim}
+(lines 69--124), after line 92:
+
+\begin{lstlisting}[caption={New field in oft\_xmhd\_2d\_sim (after line 92)}]
+REAL(r8) :: drag_coeff = 0.d0  ! Hartmann/Shercliff friction coefficient
+                                ! S_u = -drag_coeff * n * v
+\end{lstlisting}
+
+\textbf{Step 2 --- Add drag to nonlinear residual} \\
+In \texttt{nlfun\_apply} (lines 717--1006), after momentum loop ($\sim$line 906):
+
+\begin{lstlisting}[caption={Drag source term in nlfun\_apply after line~$\sim$906}]
+!---Hartmann/wall friction source: S_u = -drag_coeff * n * v
+IF (drag_coeff > 0.d0) THEN
+  IF (cyl_flag) THEN
+    DO k=1,3
+      res_loc(jr,k+1) = res_loc(jr,k+1) &
+        + self%dt * drag_coeff * basis_vals(jr) * n * vel(k) &
+          * int_factor * coords(1)
+    END DO
+  ELSE
+    DO k=1,3
+      res_loc(jr,k+1) = res_loc(jr,k+1) &
+        + self%dt * drag_coeff * basis_vals(jr) * n * vel(k) &
+          * int_factor
+    END DO
+  END IF
+END IF
+\end{lstlisting}
+
+\textbf{Step 3 --- Add drag to approximate Jacobian} \\
+In \texttt{build\_approx\_jacobian} (lines 1010--1516), velocity self-coupling block
+(lines 1232--1264):
+
+\begin{lstlisting}[caption={Drag diagonal Jacobian in momentum block}]
+IF (drag_coeff > 0.d0) THEN
+  IF (cyl_flag) THEN
+    jac_loc(k+1,k+1)%m(jr,jc) = jac_loc(k+1,k+1)%m(jr,jc) &
+      + dt_fac * drag_coeff * n * basis_vals(jr) * basis_vals(jc) &
+        * int_factor * coords(1)
+  ELSE
+    jac_loc(k+1,k+1)%m(jr,jc) = jac_loc(k+1,k+1)%m(jr,jc) &
+      + dt_fac * drag_coeff * n * basis_vals(jr) * basis_vals(jc) &
+        * int_factor
+  END IF
+END IF
+\end{lstlisting}
+
+\textbf{Step 4 --- Extract parameter} at top of both subroutines (after existing
+material extractions at lines 748--756 and 1040--1049):
+\begin{lstlisting}
+drag_coeff = self%parent_sim%drag_coeff   ! nlfun_apply
+drag_coeff = self%drag_coeff              ! build_approx_jacobian
+\end{lstlisting}
+
+\textbf{Step 5 --- Diagnostic:} add drag power
+$P_\mathrm{drag} = \alpha \int n|\mathbf{v}|^2\,dV$ to history file.
+
+\subsubsection{Input Convention}
+\begin{verbatim}
+&xmhd2d
+  drag_coeff = 1.0e-3   ! dimensionless: alpha_H * tau_ref
+/
+\end{verbatim}
+
+\subsection{Option B: Robin/Partial-Slip Velocity BC}
+
+Boundary-integral traction term: $\oint \beta_s v_\parallel \phi \,dS$.
+Requires new boundary-face quadrature loop --- more engineering effort, but
+physically cleaner (wall-surface-only action).
+
+\subsection{Option C: Region-Specific Liquid-Metal Closure}
+
+Port \texttt{eta\_reg(:)} pattern from 3D module to support per-element
+$\nu$, $\eta$, $\sigma$, $\rho$.  Enables multi-material domains.
+Substantial effort; planned as a follow-on.
+
+\subsection{Option D: TokaMaker / ThinCurr Coupling}
+
+Discussed in Section~\ref{sec:coupling_roadmap}.  Presupposes Options A--C.
+
+%==============================================================================
+\section{Master Game Plan: Sequenced Pull Requests}
+\label{sec:gameplan}
+%==============================================================================
+
+The following sequence moves from minimal first contribution to full
+plasma--blanket coupling.  Each PR is independently useful and testable.
+
+\begin{center}
+\begin{longtable}{p{0.06\textwidth}p{0.25\textwidth}p{0.35\textwidth}p{0.24\textwidth}}
+\toprule
+\textbf{PR} & \textbf{Title} & \textbf{Scope} & \textbf{Delivers} \\
+\midrule
+1 & Scalar Hartmann drag & \texttt{drag\_coeff} field; residual + Jacobian in \texttt{xmhd\_2d.F90} ($\lesssim$80 lines); exponential decay test & First runnable LM drag \\
+\addlinespace
+2 & SM82 + buoyancy + floors & Ha-based $\alpha_H$, $\alpha_S$; \texttt{g\_accel}, Boussinesq; density/T floors; ohmic+viscous heating & PTOLEMY-comparable; magnetoconvection \\
+\addlinespace
+3 & Low-Rm $\varphi$ mode & New \texttt{use\_low\_rm} solver; Poisson solve for $\varphi$; remove Alfvénic constraint; insulating-wall Neumann BC; Hartmann channel test & HIMAG-comparable; $10^{2-3}\times \Delta t$ \\
+\addlinespace
+4 & Conducting-wall BC & Robin BC on $\psi$ (or $\varphi$); wall conductance ratio $c_w$; Hunt channel benchmark & Full conducting-wall physics \\
+\addlinespace
+5 & MUG Python API & \texttt{ctypes} wrapper for \texttt{xmhd\_2d}: \texttt{setup()}, \texttt{run\_n\_steps()}, \texttt{get\_fields()}, \texttt{set\_ic()} & Enables Python-level coupling \\
+\addlinespace
+6 & Live $\mathbf{B}_0$ injection & Wire TokaMaker \texttt{TokaMaker\_field\_interpolator} to MUG's low-Rm $\mathbf{B}_0$ input at each coupling step & Time-evolving background field \\
+\addlinespace
+7 & $\mathbf{J}_{\mathrm{blanket}} \to$ TokaMaker feedback & Add blanket-current input to \texttt{grad\_shaf.F90}; return induced flux to TokaMaker equilibrium & Bidirectional coupling \\
+\addlinespace
+8 & Full coupling driver & Python orchestration loop: TokaMaker $\to$ MUG $\to$ TokaMaker; convergence check; disruption example & APS poster capability \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\subsection{Timeline Guidance}
+
+\begin{itemize}
+  \item \textbf{PRs 1--2} can be done concurrently by a single developer in
+    2--4 weeks.  No solver or architecture changes.
+  \item \textbf{PR~3} (low-Rm mode) is the biggest single-PR effort
+    ($\sim$400 lines of new Fortran + tests).  Estimate 3--6 weeks.
+    This is the most physically impactful and removes the main computational
+    bottleneck for liquid metals.
+  \item \textbf{PR~4} (Robin BC) can follow PR~3 naturally; the $\varphi$
+    formulation's Neumann BC is already correct for insulating walls, and
+    Robin simply adds the $c_w$ term.  Estimate 1--2 weeks.
+  \item \textbf{PR~5} (Python API) is primarily boilerplate following the
+    TokaMaker/ThinCurr patterns.  Estimate 2--4 weeks.
+  \item \textbf{PRs 6--8} build on each other quickly once PR~5 exists.
+    Each is primarily Python orchestration.  Estimate 2--3 weeks each.
+\end{itemize}
+
+\subsection{Computational Cost Trajectory}
+
+\begin{center}
+\begin{tabular}{llll}
+\toprule
+\textbf{After PR} & \textbf{Bottleneck} & \textbf{Relative cost} & \textbf{HPC needed?} \\
+\midrule
+0 (current) & Alfvénic $\Delta t$, 7-field NL solve & Very high for LM & Possibly \\
+1--2 & Same (drag adds nothing to cost) & Very high & Possibly \\
+3 (low-Rm) & Flow timescale $\Delta t$, 5-field NL solve & Low--moderate & No \\
+4 & Same + boundary integral & Low--moderate & No \\
+5--8 (coupled) & Coupled iterations + TokaMaker equilibrium & Moderate & Modest HPC \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The low-Rm mode (PR~3) is the step that brings MUG into the same computational
+class as PTOLEMY and HIMAG: desktop or modest cluster, not large HPC.
+
+%==============================================================================
+\section{Coupling Infrastructure Roadmap}
+\label{sec:coupling_roadmap}
+%==============================================================================
+
+\subsection{Step 1: File-Based Coupling (Available Now)}
+
+Use the existing \texttt{save\_mug()} to provide a TokaMaker equilibrium
+snapshot to a standalone MUG Fortran simulation.  Iterate manually:
+TokaMaker run $\to$ save HDF5 $\to$ MUG run $\to$ inspect output.
+No new code needed; limited to static equilibria.
+
+\subsection{Step 2: Live Field Injection via Python (After PR~5)}
+
+With the MUG Python API in place, a Python script can:
+\begin{enumerate}
+  \item Call \texttt{TokaMaker.evolve(dt\_eq)} to advance the plasma equilibrium
+  \item Call \texttt{tmaker\_interp.eval(mug\_mesh\_nodes)} to get
+    $\mathbf{B}_0$ at all MUG nodes
+  \item Inject $\mathbf{B}_0$ into MUG's low-Rm $\varphi$ solver
+  \item Call \texttt{mug.run\_n\_steps(n)} to advance the blanket flow
+  \item Repeat
+\end{enumerate}
+This is structurally identical to the TokaMaker--TORAX loop in
+\texttt{pulse\_design.py}.
+
+\subsection{Step 3: Bidirectional Feedback (After PR~7)}
+
+Add the MUG-to-TokaMaker current feedback:
+\begin{enumerate}
+  \item MUG outputs $\mathbf{J}_{\mathrm{blanket}}(R,Z)$ (the induced current
+    distribution in the liquid metal) via the Python API.
+  \item TokaMaker ingests this as an axisymmetric current source in
+    \texttt{grad\_shaf.F90}, treating it as an additional ``coil'' current.
+  \item TokaMaker re-solves the equilibrium with the blanket current included.
+  \item Iterate to convergence at each coupled timestep.
+\end{enumerate}
+
+\subsection{Step 4: ThinCurr Wall Integration (Optional Enhancement)}
+
+Once the TokaMaker--MUG loop is running, add vessel-wall eddy currents:
+\begin{enumerate}
+  \item TokaMaker provides $\dot{\mathbf{B}}$ (field rate of change) during
+    disruption.
+  \item Interpolate onto ThinCurr's wall mesh using a new spatial projection
+    kernel.
+  \item ThinCurr evolves wall eddy currents.
+  \item Wall currents feed back into TokaMaker as additional coil contributions.
+\end{enumerate}
+This completes the full disruption--wall--blanket--plasma coupling loop.
+
+%==============================================================================
+\section{Recommended First Pull Request}
+%==============================================================================
+
+\textbf{Title:} \texttt{xmhd\_2d: Add optional reduced Hartmann friction source term}
+
+\textbf{Scope:}
+\begin{enumerate}
+  \item Add \texttt{drag\_coeff = 0.d0} to \texttt{oft\_xmhd\_2d\_sim} (line~$\approx$92)
+  \item Extract at top of \texttt{nlfun\_apply} and \texttt{build\_approx\_jacobian}
+  \item Add volumetric drag to momentum residual in \texttt{nlfun\_apply} ($\sim$12 lines)
+  \item Add diagonal Jacobian to velocity block in \texttt{build\_approx\_jacobian} ($\sim$12 lines)
+  \item Wire to Fortran namelist or XML input
+  \item Add \texttt{test\_hartmann\_drag\_2d.F90/.py}: analytic exponential decay
+  \item Add drag power diagnostic to history file
+\end{enumerate}
+
+\textbf{Do not include:} region-specific properties, Robin BC, TokaMaker coupling,
+liquid-metal material constants.
+
+\textbf{Estimated size:} $\lesssim$80 lines in \texttt{xmhd\_2d.F90}, $\sim$150 lines
+for the new test.
+
+%==============================================================================
+\section{Testing and Validation Plan}
+%==============================================================================
+
+\subsection{Existing Baseline Tests (Must Still Pass)}
+
+\begin{center}
+\begin{longtable}{p{0.32\textwidth}p{0.22\textwidth}p{0.38\textwidth}}
+\toprule
+\textbf{Test} & \textbf{File} & \textbf{Pass criterion} \\
+\midrule
+2D Alfv\'{e}n wave & \texttt{test\_alfven\_2d.F90/py} & Mode frequency within tolerance; no change with \texttt{drag\_coeff=0} \\
+2D sound wave & \texttt{test\_sound\_2d.F90/py} & Acoustic frequency within tolerance \\
+Harris sheet & \texttt{harris\_sheet.F90} & Reconnection rate unchanged \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\subsection{New Unit Tests for Wall Drag}
+
+\subsubsection{Test 1: Drag-Off Regression}
+\texttt{drag\_coeff = 0}: bitwise-identical output to pre-PR baseline.
+
+\subsubsection{Test 2: Analytic Exponential Decay}
+Uniform $v_0$, $n = n_0$, $B = 0$, $\eta = \chi = D = \nu = 0$.
+\begin{equation}
+  \mathbf{v}(t) = \mathbf{v}_0 e^{-\alpha t}, \qquad
+  \left|\frac{\|v(t_f)\|}{v_0} - e^{-\alpha t_f}\right| < 10^{-4}
+\end{equation}
+
+\subsubsection{Test 3: Kinetic Energy Monotone Decay}
+$E_k(t_{i+1}) < E_k(t_i)$ at every stored timestep.
+
+\subsubsection{Test 4: Sign Test}
+$\mathbf{S}_u \cdot \mathbf{v} < 0$ at every quadrature point.
+
+\subsubsection{Test 5: Parameter Parsing}
+Negative \texttt{drag\_coeff} rejected or warned; zero value incurs zero overhead.
+
+\subsubsection{Test 6: Jacobian Consistency}
+Finite-difference Jacobian check with nonzero \texttt{drag\_coeff}.
+
+\subsubsection{Test 7: Cylindrical Mode Decay}
+Repeat Test~2 with \texttt{cyl\_flag = .TRUE.}; same analytic rate recovered.
+
+\subsection{Post-PR Validation Benchmarks}
+
+\begin{center}
+\begin{longtable}{p{0.3\textwidth}p{0.65\textwidth}}
+\toprule
+\textbf{Benchmark} & \textbf{Description} \\
+\midrule
+Hartmann channel (analytic) & Quasi-2D pressure-flow relation with
+  \texttt{drag\_coeff} = analytic $\alpha_H$; compare to Hunt (1965). \\
+SM82 duct flow & Shercliff/Walker duct flow; pressure-drop comparison. \\
+Damped Alfv\'{e}n + drag & Mode with both Alfv\'{e}nic oscillation and drag decay
+  $\exp(-\alpha t/2)$; analytic damping formula. \\
+Rayleigh--B\'{e}nard + $B$ & Magnetoconvection onset; compare to Burr \& Müller (2001). \\
+Disruption blanket transient & Drag on/off; confirm peak velocity reduction. \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+%==============================================================================
+\section{Risks and Unknowns}
+%==============================================================================
+
+\begin{enumerate}[label=\textbf{R\arabic*.}]
+  \item \textbf{Branch status of APS poster code.} May exist on a private branch.
+    \textit{Action: ask Sophia Guizzo and Chris Hansen.}
+
+  \item \textbf{Nondimensionalisation of \texttt{drag\_coeff}.} Normalisation
+    tables are absent from code comments.
+    \textit{Action: define explicitly relative to \texttt{den\_scale}, \texttt{m\_i},
+    and reference time; enforce in tests.}
+
+  \item \textbf{Density-weighted vs.\ mass-weighted drag.} Jacobian must match
+    residual exactly.
+    \textit{Action: finite-difference Jacobian check (Test~6).}
+
+  \item \textbf{Region-specific drag.} Without regional material map, drag
+    applies everywhere on the mesh.
+    \textit{Action: document; plan as PR~E.}
+
+  \item \textbf{Linear mode cylindrical restriction.} \texttt{run\_lin\_simulation}
+    aborts for cylindrical (line 378--379).
+    \textit{Action: add drag to linear residual in a follow-on PR.}
+
+  \item \textbf{Low-Rm mode requires $\mathbf{B}_0$ as input.} When MUG does
+    not evolve its own field, the background field must come from TokaMaker or
+    an analytic prescription.  This is a design requirement, not a limitation.
+
+  \item \textbf{Coupling convergence.} The alternating TokaMaker--MUG iteration
+    may converge slowly for strongly coupled disruption events.
+    \textit{Action: study convergence rate; consider sub-stepping MUG within each
+    TokaMaker step.}
+
+  \item \textbf{MUG Python API complexity.} TokaMaker's API wraps a complex
+    Fortran object; the same for MUG may require careful memory management in
+    the \texttt{ctypes} layer.
+    \textit{Action: follow ThinCurr API as template; scope as a dedicated sprint.}
+\end{enumerate}
+
+%==============================================================================
+\appendix
+\section{Commands Run}
+%==============================================================================
+
+\begin{verbatim}
+git status --short; git branch --show-current; git rev-parse HEAD
+git cat-file -t 5faae9a; git show --stat 5faae9a
+git show --name-status 5faae9a; git rev-parse 5faae9a^
+git diff --stat 5faae9a^ 5faae9a; git diff --name-status 5faae9a^ 5faae9a
+
+rg -n "liquid|lithium|lead|blanket|PbLi|TokaMaker|tokamaker|axisym|
+  Hartmann|Shercliff|drag|friction|thin.wall|conducting.wall" \
+  . --include="*.F90" --include="*.py" --include="*.in" \
+  --include="*.xml" --include="*.md" -l
+
+find . -iname "*mug*" -o -iname "*xmhd*" -o -iname "*blanket*" \
+  -o -iname "*liquid*" -o -iname "*tokamaker*"
+
+# Line-range reads in xmhd_2d.F90:
+#   1-50, 69-135, 137-180, 860-960, 1010-1070, 1232-1270, 1530-1620
+
+grep -n "def get\|def save\|def set\|def compute\|def solve" \
+  src/python/OpenFUSIONToolkit/TokaMaker/_core.py
+
+grep -n "cross_coupling\|cross_eval\|build_reduced\|ThinCurr_reduced" \
+  src/python/OpenFUSIONToolkit/ThinCurr/_core.py
+
+grep -n "coupling\|coupled\|transfer\|exchange" \
+  src/python/OpenFUSIONToolkit/TokaMaker/pulse_design.py | head -30
+
+find src/python/OpenFUSIONToolkit/ThinCurr -name "*.py" | sort
+find src/examples/TokaMaker -type f | sort
+\end{verbatim}
+
+%==============================================================================
+\section{Relevant Files, Modules, Subroutines, and Line Numbers}
+%==============================================================================
+
+\begin{center}
+\begin{longtable}{p{0.52\textwidth}p{0.1\textwidth}p{0.32\textwidth}}
+\toprule
+\textbf{File / Symbol} & \textbf{Lines} & \textbf{Role} \\
+\midrule
+\texttt{src/physics/xmhd\_2d.F90} & 1--1812 & 2D MHD module (new in 5faae9a) \\
+\quad \texttt{oft\_xmhd\_2d\_sim} type & 69--124 & Main simulation type \\
+\quad \texttt{nu}, \texttt{eta}, \texttt{chi} fields & 83, 92, 82 & Material coefficients \\
+\quad \texttt{cyl\_flag} & 71 & Cylindrical R-Z flag \\
+\quad velocity BC arrays & 93--99 & Dirichlet BC pointers \\
+\quad \texttt{run\_simulation} & 137--346 & NL time advance \\
+\quad \texttt{run\_lin\_simulation} & 350--526 & Linear time advance \\
+\quad \texttt{nlfun\_apply} & 717--1006 & Nonlinear residual \\
+\quad viscosity in \texttt{nlfun\_apply} & 880--881, 903--904 & $\nu\nabla^2\mathbf{v}$ \\
+\quad \textbf{drag injection point} & $\sim$906 & \textbf{After momentum DO k loop} \\
+\quad \texttt{build\_approx\_jacobian} & 1010--1516 & 7$\times$7 block Jacobian \\
+\quad \textbf{velocity self-coupling block} & 1232--1264 & \textbf{Jacobian drag injection point} \\
+\quad \texttt{setup\_bc} & $\approx$1602--1611 & Default Dirichlet BCs \\
+\midrule
+\texttt{src/physics/xmhd.F90} & --- & 3D MHD module \\
+\quad \texttt{nu\_par}, \texttt{nu\_perp} & 334--335 & Anisotropic viscosity \\
+\quad \texttt{eta\_reg(:)} & 332 & Regional resistivity \\
+\quad \texttt{eta\_temp}, \texttt{g\_accel} & 331, --- & T-dep.\ resistivity, gravity \\
+\midrule
+\texttt{src/physics/thin\_wall.F90} & --- & Thin-wall eddy current \\
+\texttt{src/physics/thin\_wall\_solvers.F90} & --- & ThinCurr solvers \\
+\texttt{src/physics/thin\_wall\_hodlr.F90} & --- & HODLR accelerator \\
+\midrule
+\texttt{src/physics/grad\_shaf.F90} & 4851--4939 & \texttt{gs\_save\_mug}: equilibrium export \\
+\midrule
+\texttt{src/python/.../TokaMaker/\_core.py} & 1905--1911 & \texttt{save\_mug()} Python call \\
+ & 2606--2628 & \texttt{get\_field\_eval()} interpolator \\
+ & 3012--3022 & \texttt{TokaMaker\_equil.save\_mug()} \\
+\texttt{src/python/.../TokaMaker/\_interface.py} & 161--167 & Fortran field eval bindings \\
+ & 253--291 & \texttt{TokaMaker\_field\_interpolator} \\
+\texttt{src/python/.../TokaMaker/pulse\_design.py} & 230+ & TokaMaker--TORAX coupling loop \\
+\midrule
+\texttt{src/python/.../ThinCurr/\_core.py} & 464--480 & \texttt{cross\_coupling()} \\
+ & 482--498 & \texttt{cross\_eval()} \\
+ & 659 & \texttt{build\_reduced\_model()} \\
+ & 684--743 & \texttt{ThinCurr\_reduced} class \\
+\texttt{src/python/.../ThinCurr/meshing.py} & 320--377 & Projection utilities \\
+\midrule
+\texttt{src/python/wrappers/tokamaker\_f.F90} & 1669 & \texttt{tokamaker\_save\_mug} C wrapper \\
+\midrule
+\texttt{src/examples/MUG/harris\_sheet/harris\_sheet.F90} & 1--280 & 2D reconnection example \\
+\texttt{src/examples/MUG/harris\_sheet/oft.in} & 23--49 & Input parameters \\
+\texttt{src/tests/physics/test\_alfven\_2d.F90} & --- & Alfv\'{e}n wave test \\
+\texttt{src/tests/physics/test\_sound\_2d.F90} & --- & Acoustic wave test \\
+\texttt{src/tests/physics/test\_ThinCurr.py} & 267 & ThinCurr cross\_eval test \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+%==============================================================================
+\section{Unresolved Questions for Sophia / Maintainers}
+%==============================================================================
+
+\begin{enumerate}[label=\textbf{Q\arabic*.}]
+  \item \textbf{Branch for APS poster code.}  Is the plasma--blanket coupling
+    on a private/development branch?  What is blocking merge?
+
+  \item \textbf{Normalisation convention.}  What is the reference time, density,
+    length, and field normalisation for blanket simulations?
+    Needed to correctly interpret \texttt{drag\_coeff} in dimensional units.
+
+  \item \textbf{Liquid-metal material parameters.}  What values of $\nu$, $\eta$,
+    $\chi$, $\sigma$ are used for PbLi or liquid lithium in the APS poster
+    simulations, in \texttt{xmhd\_2d} normalised units?
+
+  \item \textbf{Regional resistivity in 2D.}  Is there a plan to port
+    \texttt{eta\_reg(:)} (3D \texttt{xmhd.F90}) to \texttt{xmhd\_2d.F90}?
+
+  \item \textbf{Linear mode cylindrical restriction.}  Line 378--379 aborts
+    for cylindrical in linear mode.  Planned limitation or temporary omission?
+
+  \item \textbf{Coupling loop orchestration.}  Is there a Python driver (not in
+    \texttt{main}) alternating TokaMaker and MUG solves?
+
+  \item \textbf{Hartmann number estimates.}  Characteristic Ha for the blanket
+    geometries of interest (ITER PbLi, liquid lithium)?
+
+  \item \textbf{Low-Rm validity.}  Is Rm $\ll 1$ confirmed for the targeted
+    blanket conditions, or are there regimes where induced-field evolution
+    matters?
+
+  \item \textbf{MUG Python API priority.}  Is there appetite among OFT
+    maintainers to add a Python API for MUG, given that TokaMaker and ThinCurr
+    already have one?  This is the prerequisite for all Python-level coupling.
+
+  \item \textbf{Thin-wall coupling for 2D.}  Is there a 2D analogue of
+    \texttt{thin\_wall.F90} planned, or should the conducting-wall effect be
+    absorbed into an effective Ha via the wall conductance ratio $c_w$?
+\end{enumerate}
+
+\end{document}

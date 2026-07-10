@@ -91,6 +91,27 @@ def potential_source_from_motional_emf(
     return d_ex_dx + d_ez_dz
 
 
+def weighted_potential_source_from_motional_emf(
+    conductivity: np.ndarray,
+    motional_emf: np.ndarray,
+    x: np.ndarray,
+    z: np.ndarray,
+    components: tuple[int, int] = (0, 2),
+) -> np.ndarray:
+    '''Return div(sigma * (u x B)) for variable-conductivity solves.'''
+
+    sigma, xcoord, zcoord = _structured_scalar("conductivity", conductivity, x, z)
+    if np.any(sigma <= 0.0):
+        raise ValueError("conductivity must be positive")
+    emf = _structured_vector("motional_emf", motional_emf, x, z)
+    comp_x, comp_z = _check_components(components)
+    weighted_x = sigma * emf[..., comp_x]
+    weighted_z = sigma * emf[..., comp_z]
+    d_ex_dx = np.gradient(weighted_x, xcoord, axis=1, edge_order=2)
+    d_ez_dz = np.gradient(weighted_z, zcoord, axis=0, edge_order=2)
+    return d_ex_dx + d_ez_dz
+
+
 def insulating_wall_normal_gradient(
     motional_emf: np.ndarray,
     x: np.ndarray,
@@ -113,6 +134,28 @@ def insulating_wall_normal_gradient(
     }
 
 
+def insulating_wall_normal_flux(
+    conductivity: np.ndarray,
+    motional_emf: np.ndarray,
+    x: np.ndarray,
+    z: np.ndarray,
+    components: tuple[int, int] = (0, 2),
+) -> dict[str, np.ndarray]:
+    '''Return sigma*(u x B).n wall flux for insulating current closure.'''
+
+    sigma, _, _ = _structured_scalar("conductivity", conductivity, x, z)
+    if np.any(sigma <= 0.0):
+        raise ValueError("conductivity must be positive")
+    emf = _structured_vector("motional_emf", motional_emf, x, z)
+    comp_x, comp_z = _check_components(components)
+    return {
+        "x_min": -(sigma[:, 0] * emf[:, 0, comp_x]).copy(),
+        "x_max": (sigma[:, -1] * emf[:, -1, comp_x]).copy(),
+        "z_min": -(sigma[0, :] * emf[0, :, comp_z]).copy(),
+        "z_max": (sigma[-1, :] * emf[-1, :, comp_z]).copy(),
+    }
+
+
 def reconstruct_inductionless_current_2d(
     potential: np.ndarray,
     velocity: np.ndarray,
@@ -126,6 +169,73 @@ def reconstruct_inductionless_current_2d(
 
     grad_phi = structured_gradient_2d(potential, x, z, components=components)
     return ohms_law_current_density(sigma, velocity, magnetic_field, grad_phi)
+
+
+def axisymmetric_electric_field_from_potential(
+    potential: np.ndarray,
+    r: np.ndarray,
+    z: np.ndarray,
+    toroidal_electric_field: float | np.ndarray = 0.0,
+) -> np.ndarray:
+    '''Return axisymmetric electric field E = -grad(phi) + E_phi e_phi.
+
+    Components are ordered `(R, phi, Z)`.
+    '''
+
+    potential_values, rcoord, zcoord = _structured_scalar("potential", potential, r, z)
+    electric_field = np.zeros(potential_values.shape + (3,), dtype=np.float64)
+    electric_field[..., 0] = -np.gradient(potential_values, rcoord, axis=1, edge_order=2)
+    electric_field[..., 1] = _broadcast_scalar_field(
+        "toroidal_electric_field",
+        toroidal_electric_field,
+        potential_values.shape,
+    )
+    electric_field[..., 2] = -np.gradient(potential_values, zcoord, axis=0, edge_order=2)
+    return electric_field
+
+
+def reconstruct_axisymmetric_inductionless_current(
+    potential: np.ndarray,
+    velocity: np.ndarray,
+    magnetic_field: np.ndarray,
+    sigma: float | np.ndarray,
+    r: np.ndarray,
+    z: np.ndarray,
+    toroidal_electric_field: float | np.ndarray = 0.0,
+) -> np.ndarray:
+    '''Return axisymmetric J = sigma(-grad(phi) + u x B + E_phi e_phi).
+
+    Components are ordered `(R, phi, Z)`. The scalar potential has only
+    poloidal gradients under axisymmetry; `toroidal_electric_field` represents
+    an externally imposed loop-voltage/toroidal-electric-field contribution.
+    '''
+
+    electric_field = axisymmetric_electric_field_from_potential(
+        potential,
+        r,
+        z,
+        toroidal_electric_field=toroidal_electric_field,
+    )
+    vel = _broadcast_vector("velocity", velocity, electric_field.shape)
+    bfield = _broadcast_vector("magnetic_field", magnetic_field, electric_field.shape)
+    sigma_arr = _positive_broadcast("sigma", sigma, electric_field.shape[:-1])
+    return sigma_arr[..., None] * (electric_field + np.cross(vel, bfield))
+
+
+def toroidal_electric_field_from_loop_voltage(
+    loop_voltage: float | np.ndarray,
+    r: float | np.ndarray,
+) -> float | np.ndarray:
+    '''Return axisymmetric E_phi = V_loop / (2*pi*R).'''
+
+    radius = np.asarray(r, dtype=np.float64)
+    if not np.all(np.isfinite(radius)) or np.any(radius <= 0.0):
+        raise ValueError("r must contain positive finite values")
+    voltage = np.asarray(loop_voltage, dtype=np.float64)
+    if not np.all(np.isfinite(voltage)):
+        raise ValueError("loop_voltage must contain only finite values")
+    field = voltage / (2.0 * np.pi * radius)
+    return _maybe_scalar(field)
 
 
 def divergence_free_current_from_streamfunction(
@@ -146,6 +256,29 @@ def divergence_free_current_from_streamfunction(
     current = np.zeros(psi.shape + (3,), dtype=np.float64)
     current[..., comp_x] = np.gradient(psi, zcoord, axis=0, edge_order=2)
     current[..., comp_z] = -np.gradient(psi, xcoord, axis=1, edge_order=2)
+    return current
+
+
+def axisymmetric_current_from_flux_function(
+    flux_function: np.ndarray,
+    r: np.ndarray,
+    z: np.ndarray,
+) -> np.ndarray:
+    '''Return axisymmetric divergence-free poloidal current from a flux function.
+
+    Components are `(R, phi, Z)` with
+    `J_R = (1/R) dpsi/dZ`, `J_Z = -(1/R) dpsi/dR`, and `J_phi = 0`.
+    This makes `(1/R) d(R J_R)/dR + dJ_Z/dZ = 0` up to the structured-grid
+    differentiation error.
+    '''
+
+    psi, rcoord, zcoord = _structured_scalar("flux_function", flux_function, r, z)
+    if np.any(rcoord <= 0.0):
+        raise ValueError("r must be positive for axisymmetric current diagnostics")
+    r_grid = rcoord[None, :]
+    current = np.zeros(psi.shape + (3,), dtype=np.float64)
+    current[..., 0] = np.gradient(psi, zcoord, axis=0, edge_order=2) / r_grid
+    current[..., 2] = -np.gradient(psi, rcoord, axis=1, edge_order=2) / r_grid
     return current
 
 
@@ -174,6 +307,27 @@ def charge_conservation_residual_2d(
     return d_jx_dx + d_jz_dz
 
 
+def axisymmetric_charge_conservation_residual(
+    current_density: np.ndarray,
+    r: np.ndarray,
+    z: np.ndarray,
+) -> np.ndarray:
+    '''Return axisymmetric residual div(J) = (1/R)d(RJ_R)/dR + dJ_Z/dZ.'''
+
+    current = _as_vector_array("current_density", current_density)
+    if current.ndim != 3:
+        raise ValueError("current_density must have shape (nz, nr, 3)")
+    rcoord, zcoord = _structured_coordinates(r, z)
+    if np.any(rcoord <= 0.0):
+        raise ValueError("r must be positive for axisymmetric divergence")
+    if current.shape[:2] != (zcoord.size, rcoord.size):
+        raise ValueError("current_density shape must match z and r coordinates")
+    r_grid = rcoord[None, :]
+    d_rjr_dr = np.gradient(r_grid * current[..., 0], rcoord, axis=1, edge_order=2)
+    d_jz_dz = np.gradient(current[..., 2], zcoord, axis=0, edge_order=2)
+    return d_rjr_dr / r_grid + d_jz_dz
+
+
 def wall_normal_current_extrema(
     current_density: np.ndarray,
     components: tuple[int, int] = (0, 2),
@@ -190,6 +344,141 @@ def wall_normal_current_extrema(
         "z_min": float(np.max(np.abs(current[0, :, comp_z]))),
         "z_max": float(np.max(np.abs(current[-1, :, comp_z]))),
     }
+
+
+def axisymmetric_wall_normal_current_extrema(current_density: np.ndarray) -> dict[str, float]:
+    '''Return max absolute normal current on rectangular R-Z grid boundaries.'''
+
+    current = _as_vector_array("current_density", current_density)
+    if current.ndim != 3:
+        raise ValueError("current_density must have shape (nz, nr, 3)")
+    return {
+        "r_min": float(np.max(np.abs(current[:, 0, 0]))),
+        "r_max": float(np.max(np.abs(current[:, -1, 0]))),
+        "z_min": float(np.max(np.abs(current[0, :, 2]))),
+        "z_max": float(np.max(np.abs(current[-1, :, 2]))),
+    }
+
+
+def axisymmetric_boundary_current_integrals(current_density: np.ndarray, r: np.ndarray, z: np.ndarray) -> dict[str, float]:
+    '''Return signed outward boundary-current integrals on an R-Z grid.
+
+    Components are `(R, phi, Z)`. The returned values have units of amperes.
+    Radial surfaces use `dS = 2*pi*R*dZ`; horizontal surfaces use
+    `dS = 2*pi*R*dR`.
+    '''
+
+    current = _as_vector_array("current_density", current_density)
+    if current.ndim != 3:
+        raise ValueError("current_density must have shape (nz, nr, 3)")
+    rcoord, zcoord = _structured_coordinates(r, z)
+    if np.any(rcoord <= 0.0):
+        raise ValueError("r must be positive for axisymmetric boundary integrals")
+    if current.shape[:2] != (zcoord.size, rcoord.size):
+        raise ValueError("current_density shape must match z and r coordinates")
+    dr = _node_widths(rcoord)
+    dz = _node_widths(zcoord)
+    return {
+        "r_min": float(np.sum(-current[:, 0, 0] * (2.0 * np.pi * rcoord[0] * dz))),
+        "r_max": float(np.sum(current[:, -1, 0] * (2.0 * np.pi * rcoord[-1] * dz))),
+        "z_min": float(np.sum(-current[0, :, 2] * (2.0 * np.pi * rcoord * dr))),
+        "z_max": float(np.sum(current[-1, :, 2] * (2.0 * np.pi * rcoord * dr))),
+    }
+
+
+def axisymmetric_net_boundary_current(current_density: np.ndarray, r: np.ndarray, z: np.ndarray) -> float:
+    '''Return net signed outward current through the R-Z boundary.'''
+
+    boundary_current = axisymmetric_boundary_current_integrals(current_density, r, z)
+    return float(sum(boundary_current.values()))
+
+
+def axisymmetric_cell_volumes(r: np.ndarray, z: np.ndarray) -> np.ndarray:
+    '''Return midpoint-control-volume weights dV = 2*pi*R*dR*dZ on an R-Z grid.'''
+
+    rcoord, zcoord = _structured_coordinates(r, z)
+    if np.any(rcoord <= 0.0):
+        raise ValueError("r must be positive for axisymmetric volumes")
+    dr = _node_widths(rcoord)
+    dz = _node_widths(zcoord)
+    return 2.0 * np.pi * rcoord[None, :] * dz[:, None] * dr[None, :]
+
+
+def mechanical_power_density(force_density: np.ndarray, velocity: np.ndarray) -> float | np.ndarray:
+    '''Return local mechanical power density p = f.u.'''
+
+    force = _as_vector_array("force_density", force_density)
+    vel = _broadcast_vector("velocity", velocity, force.shape)
+    power = np.sum(force * vel, axis=-1)
+    return _maybe_scalar(power)
+
+
+def electric_power_density(current_density: np.ndarray, electric_field: np.ndarray) -> float | np.ndarray:
+    '''Return local electrical power density p = J.E.'''
+
+    current = _as_vector_array("current_density", current_density)
+    electric = _broadcast_vector("electric_field", electric_field, current.shape)
+    power = np.sum(current * electric, axis=-1)
+    return _maybe_scalar(power)
+
+
+def inductionless_power_balance_residual(
+    current_density: np.ndarray,
+    velocity: np.ndarray,
+    magnetic_field: np.ndarray,
+    sigma: float | np.ndarray,
+    electric_field: np.ndarray,
+) -> float | np.ndarray:
+    '''Return q_J + (J x B).u - J.E for inductionless Ohm's law.
+
+    For `J = sigma(E + u x B)`, `q_J = |J|^2/sigma`, and
+    `f = J x B`, this residual should vanish pointwise up to roundoff.
+    '''
+
+    current = _as_vector_array("current_density", current_density)
+    force = lorentz_force_density(current, magnetic_field)
+    joule = joule_heating_density(current, sigma)
+    mechanical = mechanical_power_density(force, velocity)
+    electric = electric_power_density(current, electric_field)
+    residual = joule + mechanical - electric
+    return _maybe_scalar(np.asarray(residual))
+
+
+def axisymmetric_torque_density(
+    force_density: np.ndarray,
+    r: np.ndarray,
+    z: np.ndarray,
+) -> np.ndarray:
+    '''Return torque-about-axis density tau = R*f_phi on an R-Z grid.'''
+
+    force = _as_vector_array("force_density", force_density)
+    if force.ndim != 3:
+        raise ValueError("force_density must have shape (nz, nr, 3)")
+    rcoord, zcoord = _structured_coordinates(r, z)
+    if np.any(rcoord <= 0.0):
+        raise ValueError("r must be positive for axisymmetric torque diagnostics")
+    if force.shape[:2] != (zcoord.size, rcoord.size):
+        raise ValueError("force_density shape must match z and r coordinates")
+    return rcoord[None, :] * force[..., 1]
+
+
+def axisymmetric_volume_integral(density: np.ndarray, r: np.ndarray, z: np.ndarray) -> float:
+    '''Return integral density dV over an axisymmetric R-Z grid.'''
+
+    values, rcoord, zcoord = _structured_scalar("density", density, r, z)
+    return float(np.sum(values * axisymmetric_cell_volumes(rcoord, zcoord)))
+
+
+def axisymmetric_integrated_power(power_density: np.ndarray, r: np.ndarray, z: np.ndarray) -> float:
+    '''Return volume-integrated power from a scalar power density.'''
+
+    return axisymmetric_volume_integral(power_density, r, z)
+
+
+def axisymmetric_integrated_torque(force_density: np.ndarray, r: np.ndarray, z: np.ndarray) -> float:
+    '''Return torque about the symmetry axis from force density.'''
+
+    return axisymmetric_volume_integral(axisymmetric_torque_density(force_density, r, z), r, z)
 
 
 def solve_potential_dirichlet_2d(
@@ -566,6 +855,17 @@ def _positive_broadcast(name: str, values: float | np.ndarray, target_shape: tup
     return arr
 
 
+def _broadcast_scalar_field(name: str, values: float | np.ndarray, target_shape: tuple[int, ...]) -> np.ndarray:
+    arr = np.asarray(values, dtype=np.float64)
+    try:
+        arr = np.broadcast_to(arr, target_shape)
+    except ValueError as exc:
+        raise ValueError(f"{name} must broadcast to {target_shape}") from exc
+    if not np.all(np.isfinite(arr)):
+        raise ValueError(f"{name} must contain only finite values")
+    return arr
+
+
 def _structured_scalar(
     name: str,
     values: np.ndarray,
@@ -631,6 +931,14 @@ def _uniform_spacing(name: str, coord: np.ndarray) -> float:
     if not np.allclose(diffs, spacing, rtol=1.0e-12, atol=1.0e-14):
         raise ValueError(f"{name} must be uniformly spaced for this reference solve")
     return spacing
+
+
+def _node_widths(coord: np.ndarray) -> np.ndarray:
+    widths = np.empty_like(coord, dtype=np.float64)
+    widths[1:-1] = 0.5 * (coord[2:] - coord[:-2])
+    widths[0] = 0.5 * (coord[1] - coord[0])
+    widths[-1] = 0.5 * (coord[-1] - coord[-2])
+    return widths
 
 
 def _harmonic_mean(left: float, right: float) -> float:

@@ -1,0 +1,11 @@
+metric,value
+max_abs_phi_error,2.758904216194e-14
+rms_phi_error,1.620087950423e-14
+max_bulk_abs_current_error,1.254552017826e-13
+rms_bulk_current_error,4.420475970698e-14
+max_all_pointwise_current_error,5.250000000002e-01
+max_excluded_interface_band_current_error,5.250000000002e-01
+max_bulk_abs_divJ,1.857958231710e-12
+max_wall_normal_current,3.264055692398e-14
+max_interface_face_current_error,1.227906665235e-13
+rms_interface_face_current_error,1.162473686853e-13

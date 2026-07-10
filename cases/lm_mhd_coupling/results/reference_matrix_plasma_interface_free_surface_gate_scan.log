@@ -1,0 +1,3 @@
+Wrote plasma/LM free-surface gate scan to cases/lm_mhd_coupling/results
+$ /opt/homebrew/Caskroom/miniconda/base/bin/python /Users/tkiker/Documents/GitHub/OpenFUSIONToolkit/cases/lm_mhd_coupling/plasma_interface_free_surface_gate_scan.py
+
