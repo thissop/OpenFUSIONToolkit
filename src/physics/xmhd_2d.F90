@@ -1032,17 +1032,21 @@ DO i=1,mesh%nc
         - self%dt*basis_vals(jr)*vel(1)*by*int_factor/(coords(1)+gs_epsilon)**2 &
         + self%dt*eta*DOT_PRODUCT(basis_grads(:,jr), dby)*int_factor/(coords(1)+gs_epsilon)
       ELSE
-        ! Background in-plane field must enter the stretching source (B.grad)v_y.
-        ! (B_0 x yhat) x yhat = -B_0_inplane maps B_0 into the flux-gradient slot; the
-        ! sign was determined EMPIRICALLY against the Shercliff duct (the opposite sign
-        ! produces anti-damped Alfven growth; this sign gives Hartmann braking). Zero
-        ! for purely out-of-plane (axial) B_0, so prior cases are unchanged. The
-        ! cylindrical branch is intentionally untouched (no validated cyl case drives
-        ! out-of-plane flow with an in-plane background field).
-        tmp1 = cross_product(dpsi - cross_product([0.d0,1.d0,0.d0],B_0), dvel(2,:))
+        ! Field-line stretching source (B.grad)v_y with the FULL in-plane field
+        ! B_in = grad(psi) x yhat + B_0_in ((yhat x B_0) x yhat = B_0_inplane maps B_0
+        ! into the flux-gradient slot). With B_in = +grad(psi) x yhat (the momentum
+        ! btmp convention), (B_in.grad)v_y = -tmp1(2), so the backward-Euler residual
+        ! term is +dt*phi*tmp1(2). The original -dt*phi*tmp1(2) was a latent sign error
+        ! in the (previously unexercised) by<->vely polarization: verified empirically
+        ! by test_alfven_by2d (old sign: exponential growth at rate k*v_A; this sign:
+        ! oscillation) and by the Shercliff duct (this sign: Hartmann braking, 0.004%
+        ! vs analytic). Zero effect for purely out-of-plane (axial) B_0 with by=0
+        ! initial data paths that never grow by. Cylindrical branch intentionally
+        ! untouched pending a cyl-mode test.
+        tmp1 = cross_product(dpsi + cross_product([0.d0,1.d0,0.d0],B_0), dvel(2,:))
         res_loc(jr, 7) = res_loc(jr, 7) &
         + basis_vals(jr)*by*int_factor &
-        - basis_vals(jr)*self%dt*tmp1(2)*int_factor &
+        + basis_vals(jr)*self%dt*tmp1(2)*int_factor &
         + basis_vals(jr)*self%dt*DOT_PRODUCT(vel, dby)*int_factor &
         + basis_vals(jr)*self%dt*by*div_vel*int_factor &
         + self%dt*eta*DOT_PRODUCT(basis_grads(:,jr), dby)*int_factor
@@ -1552,16 +1556,16 @@ DO i=1,mesh%nc
           jac_loc(7,3)%m(jr,jc) = jac_loc(7, 3)%m(jr,jc) &
           -basis_vals(jr)*dt_fac*tmp2(2)*int_factor/(coords(1)+gs_epsilon)
         ELSE
-          ! Include the background in-plane field in the stretch coupling, matching
-          ! the residual's convention (see nlfun_apply By block).
-          tmp2 = cross_product(dpsi - cross_product([0.d0,1.d0,0.d0],B_0), basis_grads(:,jc))
+          ! Full in-plane field (psi + background) in the stretch coupling, with the
+          ! corrected sign — see nlfun_apply By block.
+          tmp2 = cross_product(dpsi + cross_product([0.d0,1.d0,0.d0],B_0), basis_grads(:,jc))
           DO l=1,3
             jac_loc(7,l+1)%m(jr,jc) = jac_loc(7, l+1)%m(jr,jc) &
             + basis_vals(jr)*dt_fac*basis_vals(jc)*dby(l)*int_factor &
             + basis_vals(jr)*dt_fac*by*basis_grads(l,jc)*int_factor
             IF (l==2) THEN
               jac_loc(7,l+1)%m(jr,jc) = jac_loc(7, l+1)%m(jr,jc) &
-              - basis_vals(jr)*dt_fac*tmp2(l)*int_factor
+              + basis_vals(jr)*dt_fac*tmp2(l)*int_factor
             END IF
           END DO
         END IF
@@ -1571,8 +1575,9 @@ DO i=1,mesh%nc
           jac_loc(7, 6)%m(jr,jc) = jac_loc(7, 6)%m(jr,jc) &
           - basis_vals(jr)*dt_fac*tmp2(2)*int_factor/(coords(1)+gs_epsilon)
         ELSE
+          ! Sign corrected with the stretch term (see nlfun_apply By block)
           jac_loc(7, 6)%m(jr,jc) = jac_loc(7, 6)%m(jr,jc) &
-          - basis_vals(jr)*dt_fac*tmp2(2)*int_factor  
+          + basis_vals(jr)*dt_fac*tmp2(2)*int_factor
         END IF
         !-- by, by
         IF (cyl_flag) THEN

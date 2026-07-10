@@ -5,6 +5,31 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-07-10 (bug #2) — latent sign error in the by stretch term found & fixed; Alfven dispersion now verified
+
+The open item from the "MUG rung 1" entry is closed, and it was real: the **pre-existing**
+psi-based stretch term in the `by` equation (`-dt*phi*[dpsi x grad(v_y)]_y`) had the wrong
+sign. New test `test_alfven_by2d` (by<->vely shear-Alfven polarization, background field from
+psi, B_0 = 0 — the polarization NO prior test exercised): old sign → kinetic energy grows
+exponentially at rate k*v_A from step zero; corrected sign → clean oscillation with measured
+**period 0.1004 vs analytic 0.1000** and backward-Euler decay. With the empirical answer in
+hand the algebra also closes: with the momentum convention B_in = +grad(psi) x yhat, the
+residual term must be +dt*phi*tmp1(2); my earlier B_0 term's "flipped" sign was never an
+exception — the original line was the error.
+
+Fixed in residual + both Jacobian blocks (by<->vel, by<->psi), Cartesian branch; cyl branch
+documented as pending. Shercliff Ha=20 regression after the rewrite: **bit-identical**
+(0.004%, relL2 5.6e-4) — the B_0 path is algebraically unchanged.
+
+Consequences: (1) the transient rungs (T1/Tc) and Hunt H1 are now safe — any case where psi
+becomes active would have been corrupted; (2) **two real full-induction bugs found by the
+validation ladder in one day** — strong Paper-2 material; (3) both fixes + the new test are
+candidates for an upstream OFT PR.
+
+S1 Ha=1323 production run unaffected (psi = 0 identically; job running, ~7 h left).
+
+---
+
 ## 2026-07-10 (S1a DONE) — **three-way overlay complete at Ha=100: MUG 0.000% core-vel err**
 
 The S1a rung is closed. MUG (128² packed mesh, wall dz=1.5e-3 = 6.5 cells/Hartmann-layer,
