@@ -1032,6 +1032,14 @@ DO i=1,mesh%nc
         - self%dt*basis_vals(jr)*vel(1)*by*int_factor/(coords(1)+gs_epsilon)**2 &
         + self%dt*eta*DOT_PRODUCT(basis_grads(:,jr), dby)*int_factor/(coords(1)+gs_epsilon)
       ELSE
+        ! Background in-plane field must enter the stretching source (B.grad)v_y.
+        ! (B_0 x yhat) x yhat = -B_0_inplane maps B_0 into the flux-gradient slot; the
+        ! sign was determined EMPIRICALLY against the Shercliff duct (the opposite sign
+        ! produces anti-damped Alfven growth; this sign gives Hartmann braking). Zero
+        ! for purely out-of-plane (axial) B_0, so prior cases are unchanged. The
+        ! cylindrical branch is intentionally untouched (no validated cyl case drives
+        ! out-of-plane flow with an in-plane background field).
+        tmp1 = cross_product(dpsi - cross_product([0.d0,1.d0,0.d0],B_0), dvel(2,:))
         res_loc(jr, 7) = res_loc(jr, 7) &
         + basis_vals(jr)*by*int_factor &
         - basis_vals(jr)*self%dt*tmp1(2)*int_factor &
@@ -1544,6 +1552,9 @@ DO i=1,mesh%nc
           jac_loc(7,3)%m(jr,jc) = jac_loc(7, 3)%m(jr,jc) &
           -basis_vals(jr)*dt_fac*tmp2(2)*int_factor/(coords(1)+gs_epsilon)
         ELSE
+          ! Include the background in-plane field in the stretch coupling, matching
+          ! the residual's convention (see nlfun_apply By block).
+          tmp2 = cross_product(dpsi - cross_product([0.d0,1.d0,0.d0],B_0), basis_grads(:,jc))
           DO l=1,3
             jac_loc(7,l+1)%m(jr,jc) = jac_loc(7, l+1)%m(jr,jc) &
             + basis_vals(jr)*dt_fac*basis_vals(jc)*dby(l)*int_factor &

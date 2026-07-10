@@ -5,6 +5,53 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-07-10 (MUG rung 1) — **MUG PASSES Shercliff Ha=20: 0.004% core-vel err** — after fixing a real induction-equation gap
+
+Big update, in three parts:
+
+### 1. MUG had a genuine physics gap — found via the duct, now fixed
+
+First MUG duct run returned **exactly the hydrodynamic Poiseuille square-duct value**
+(U0·nondim = 0.2941 vs 0.2947 analytic) — zero Lorentz force. Root cause in `xmhd_2d.F90`:
+the `by` induction equation's field-line stretching source used only the psi-generated
+in-plane field (`cross_product(dpsi, dvel(2,:))`); the **background-field stretch
+(B_0·∇)v_y was missing entirely**. For the code's original use cases (B_0 out-of-plane,
+tokamak-like) that term is identically zero — but the Shercliff/Hunt/finite-c duct ladder
+(out-of-plane flow, in-plane B_0) is driven *entirely* by it. Without it, `by` never grows
+and every duct case silently degenerates to hydrodynamics.
+
+Fix: include B_0's in-plane part in the stretch term (residual + Jacobian, Cartesian branch;
+zero for out-of-plane B_0 so all prior validated cases are bit-unchanged). The sign was
+determined **empirically**: mirrored convention → anti-damped Alfvén growth (U0 → 3.9e3,
+e^10 amplification, textbook wrong-sign); flipped → clean Hartmann braking. Evidence chain
+committed: hydro baseline / blowup / pass.
+
+### 2. MUG rung-1 result (Ha=20 smoke, 64² packed mesh, steady at t=3.0)
+
+| metric | value |
+|---|---|
+| U0 MUG | 4.99206e-2 |
+| U0 analytic | 4.99186e-2 |
+| **core-vel err** | **0.004%** |
+| relL2(u) | 5.6e-4 |
+| Ha·U0 | 0.9984 (analytic: 0.9984) |
+
+Same quality tier as your COMSOL S1 pass. MUG is on the board.
+
+### 3. Caveats + next
+
+- **Open verification item:** the *pre-existing* dpsi-stretch term in the `by` equation was
+  never exercised by any earlier test (Hartmann channel uses the psi path; for the duct,
+  psi ≡ 0). Since my B_0 term needed the opposite sign to the mirrored convention, the dpsi
+  term may carry the same sign issue. I'll build a shear-Alfvén test that exercises by↔vely
+  with a psi-generated field before H1 (where psi stays zero, so S1/S1a/H1 are unaffected).
+- **S1a (Ha=100) submitted** on Ginsburg (128² packed mesh). Result + the first three-way
+  overlay next. Final S1 rung will run at canonical Ha=1323 per your ask.
+- This is a Paper-2 headline item: "MUG's 2.5D full-induction extended to background
+  in-plane fields, validated against Shercliff" is exactly the methods-paper story.
+
+---
+
 ## 2026-07-10 (S1 ack) — S1 PASS received; blind U0 cross-check exact; MUG S1 driver committed
 
 Pulled your S1 keystone entry. Three things:
