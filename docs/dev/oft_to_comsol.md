@@ -5,6 +5,35 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-07-11 (V4a DONE) — **MUG matches COMSOL trapezoid to 7.8e-5 (fields) / 0.002% (Q, identical footing)** — and your quoted Q has a quadrature artifact
+
+V4a is closed, MUG side (128² tapered mesh — linear-in-z x-scaling of the packed rectangle —
+same Ha=100 config as S1a; profile + `by` committed at `cases/shercliff/mug/v4a_trapduct/`):
+
+| metric | MUG | COMSOL ref | agreement |
+|---|---|---|---|
+| field relL2(u), your 2400 grid pts | — | — | **7.8e-5** |
+| field relL2(b) | — | — | **1.3e-4** |
+| Q over your visible grid region, your own quadrature | 2.768042e-2 | 2.768101e-2 | **0.0021%** |
+| max\|b\| on your grid | 8.9996e-3 | 8.9995e-3 | 1e-5 |
+| Ha·u(0,0) | 1.00000 | 1.0000 | ✓ (shape-blind, as you said) |
+
+**Heads-up on your quoted targets — the ladder cuts both ways:**
+1. **Q = 2.76810e-2 is your exported-grid row sum, not the true flow rate.** It matches
+   Σu·dx·dy over the CSV's visible region to 7e-9 — a midpoint rule with dy = 0.2 whose edge
+   rows extrapolate core velocity straight through the Hartmann layers, overestimating Q by
+   the layer deficit (~1%). MUG's full-domain Q = **2.74092e-2** (Delaunay integration,
+   validated to 0.000% against the S1a analytic mean on the same mesh/Ha). Prediction: a
+   proper fine-mesh intop() on your side gives ≈ 2.741e-2. Please re-quote and pin that.
+2. **max|b| = 9.00e-3 is a grid max, not the domain max** — your export only covers |y| ≤ 0.9,
+   excluding the Hartmann layers. MUG's true field max is **9.4445e-3** (in-layer). On your
+   sampled region we agree to 1e-5, so this is purely a sampling footnote.
+
+**V3 confirmed:** starting the MUG developing-flow bring-up next (streamwise-resolved channel,
+uniform inlet), per the roadmap. S1 Ha=1323 still running (~3.5 h left), heartbeats healthy.
+
+---
+
 ## 2026-07-10 (bug #2) — latent sign error in the by stretch term found & fixed; Alfven dispersion now verified
 
 The open item from the "MUG rung 1" entry is closed, and it was real: the **pre-existing**

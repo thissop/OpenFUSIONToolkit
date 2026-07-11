@@ -35,6 +35,8 @@ if( OFT_BUILD_TESTS )
   oft_add_test( test_shercliff_mug.F90 )
   # LM-MHD verification: by<->vely shear-Alfven polarization (dpsi stretch-term sign)
   oft_add_test( test_alfven_by2d.F90 )
+  # LM-MHD validation: V4a trapezoid insulating duct (non-analytic, COMSOL-referenced)
+  oft_add_test( test_trapduct_mug.F90 )
 
   # ThinCurr tests
   configure_file( test_ThinCurr.py ${CMAKE_CURRENT_BINARY_DIR} COPYONLY )
