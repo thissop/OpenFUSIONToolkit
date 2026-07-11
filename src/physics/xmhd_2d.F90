@@ -100,17 +100,17 @@ TYPE, public :: oft_xmhd_2d_sim
   !    pressure-gradient and viscous terms). Constant => no Jacobian contribution.
   LOGICAL :: use_body_force = .FALSE. !< Enable uniform body-force momentum source
   REAL(r8) :: body_force(3) = [0.d0,0.d0,0.d0] !< Body force per unit mass [accel units]
-  !--- Conducting-wall (Robin) EM boundary condition for psi: LM-MHD STUB, default off.
-  !    Typed entry point for future Hunt/Shercliff conducting-wall duct cases. The intended
-  !    Robin condition on the poloidal flux at the wall is  psi + c_wall*d(psi)/dn = 0, with
+  !--- Conducting-wall (Robin) EM boundary condition: LM-MHD Phase-4, default off.
+  !    Thin-wall condition on the axial induced field:  by + c_wall*d(by)/dn = 0, with
   !    c_wall = sigma_w*t_w/(sigma_f*a) the wall-conductance ratio (wall conductivity*thickness
-  !    over fluid conductivity*half-width). c_wall = 0.d0 is the present default and leaves all
-  !    behaviour unchanged: this component is currently UNUSED (not read by setup_bc, the
-  !    residual, or the Jacobian). The mapping of the c_wall limits to insulating vs conducting
-  !    walls depends on the psi sign / EM-BC convention (the insulating Hartmann case on this
-  !    branch uses the natural d(psi)/dn=0 wall condition) and must be settled before wiring;
-  !    see the design note in deliverables/lm_mhd_for_yuchen/OFT_LM_MHD_state_and_roadmap.md.
-  REAL(r8) :: c_wall = 0.d0 !< Wall-conductance ratio for conducting-wall Robin psi BC (STUB, unused)
+  !    over fluid conductivity*half-width). c_wall = 0 (default) leaves behaviour unchanged
+  !    (walls are then whatever the by_bc mask says: Dirichlet by=0 = insulating, or natural
+  !    d(by)/dn=0 = perfectly conducting). When c_wall > 0 the Robin boundary term is applied
+  !    on boundary edges whose endpoints are FREE in by_bc (driver masks select which walls);
+  !    implemented in nlfun_apply (residual) and build_approx_jacobian ((7,7) block) via the
+  !    exact order-1 edge mass matrix. Cartesian + order=1 only (guarded in setup). The
+  !    analogous psi Robin term (in-plane conjugate cases) is future work.
+  REAL(r8) :: c_wall = 0.d0 !< Wall-conductance ratio for thin-wall Robin by BC (0 = off)
   LOGICAL, CONTIGUOUS, POINTER, DIMENSION(:) :: n_bc => NULL() !< n BC flag
   LOGICAL, CONTIGUOUS, POINTER, DIMENSION(:) :: velx_bc => NULL() !< vel BC flag
   LOGICAL, CONTIGUOUS, POINTER, DIMENSION(:) :: vely_bc => NULL() !< vel BC flag
@@ -1088,6 +1088,31 @@ CALL fem_dirichlet_vec(oft_blagrange,vel_weights(3, :),velz_res,self%parent_sim%
 CALL fem_dirichlet_vec(oft_blagrange,T_weights,T_res,self%parent_sim%T_bc)
 CALL fem_dirichlet_vec(oft_blagrange,psi_weights,psi_res,self%parent_sim%psi_bc)
 CALL fem_dirichlet_vec(oft_blagrange,by_weights,by_res,self%parent_sim%by_bc)
+!---Phase-4: thin-wall (finite wall-conductance) Robin BC on by:
+!  b + c_wall*db/dn = 0 at the wall. Integrating the by diffusion term by parts
+!  leaves the boundary integral -dt*eta*OINT (db/dn)*phi ds = +dt*(eta/c_wall)*
+!  OINT b*phi ds. For order-1 elements the edge integral is exact via the 1D
+!  linear mass matrix |e|/6*[[2,1],[1,2]] — no quadrature needed. Applied only
+!  on boundary edges whose BOTH endpoints are free (not by-Dirichlet): the
+!  driver's by_bc mask selects thin-wall vs insulating walls per side.
+!  Cartesian, order-1 only (guarded in setup); each boundary edge contributes
+!  exactly once (serial loop, after the threaded cell assembly, after the
+!  Dirichlet masking so Robin rows are never Dirichlet rows).
+IF(self%parent_sim%c_wall > 0.d0)THEN
+  BLOCK
+  INTEGER(i4) :: ke, ed, ip1, ip2
+  REAL(r8) :: elen, rfac
+  DO ke=1,mesh%nbe
+    ed = mesh%lbe(ke)
+    ip1 = mesh%le(1,ed); ip2 = mesh%le(2,ed)
+    IF(self%parent_sim%by_bc(ip1).OR.self%parent_sim%by_bc(ip2))CYCLE
+    elen = SQRT(SUM((mesh%r(:,ip1)-mesh%r(:,ip2))**2))
+    rfac = self%dt*eta*elen/(self%parent_sim%c_wall*6.d0)
+    by_res(ip1) = by_res(ip1) + rfac*(2.d0*by_weights(ip1) + by_weights(ip2))
+    by_res(ip2) = by_res(ip2) + rfac*(by_weights(ip1) + 2.d0*by_weights(ip2))
+  END DO
+  END BLOCK
+END IF
 !---Put results into full vector
 CALL b%restore_local(n_res,1,add=.TRUE.,wait=.TRUE.)
 CALL b%restore_local(velx_res,2,add=.TRUE.,wait=.TRUE.)
@@ -1602,6 +1627,34 @@ DO i=1,mesh%nc
     jac_loc(1, jr)%m = jac_loc(1, jr)%m / self%den_scale
     jac_loc(jr, 1)%m = jac_loc(jr, 1)%m * self%den_scale
   END DO
+  !---Phase-4 thin-wall Robin boundary term on by (see nlfun_apply): per-cell
+  !  edge-mass contribution +dt_fac*(eta/c_wall)*|e|/6*[[2,1],[1,2]] on (7,7)
+  !  for boundary edges of this cell with both endpoints free. Each boundary
+  !  edge belongs to exactly one cell, so this adds each edge once.
+  IF(self%c_wall > 0.d0)THEN
+    BLOCK
+    INTEGER(i4) :: ke, ed, ip1, ip2, jr1, jr2, jq
+    REAL(r8) :: elen, rfac
+    DO ke=1,3
+      ed = ABS(mesh%lce(ke,i))
+      IF(.NOT.mesh%be(ed))CYCLE
+      ip1 = mesh%le(1,ed); ip2 = mesh%le(2,ed)
+      IF(self%by_bc(ip1).OR.self%by_bc(ip2))CYCLE
+      jr1 = 0; jr2 = 0
+      DO jq=1,oft_blagrange%nce
+        IF(cell_dofs(jq)==ip1)jr1 = jq
+        IF(cell_dofs(jq)==ip2)jr2 = jq
+      END DO
+      IF(jr1==0.OR.jr2==0)CYCLE
+      elen = SQRT(SUM((mesh%r(:,ip1)-mesh%r(:,ip2))**2))
+      rfac = dt_fac*eta*elen/(self%c_wall*6.d0)
+      jac_loc(7,7)%m(jr1,jr1) = jac_loc(7,7)%m(jr1,jr1) + 2.d0*rfac
+      jac_loc(7,7)%m(jr1,jr2) = jac_loc(7,7)%m(jr1,jr2) + rfac
+      jac_loc(7,7)%m(jr2,jr1) = jac_loc(7,7)%m(jr2,jr1) + rfac
+      jac_loc(7,7)%m(jr2,jr2) = jac_loc(7,7)%m(jr2,jr2) + 2.d0*rfac
+    END DO
+    END BLOCK
+  END IF
   !---Apply Boundary Conditions
   CALL self%fe_rep%mat_zero_local_rows(jac_loc,self%n_bc(cell_dofs),1)
   CALL self%fe_rep%mat_zero_local_rows(jac_loc,self%velx_bc(cell_dofs), 2)
@@ -1728,6 +1781,12 @@ end subroutine setup
 !---------------------------------------------------------------------------
 subroutine setup_bc(self)
 class(oft_xmhd_2d_sim), intent(inout) :: self
+IF(self%c_wall > 0.d0)THEN
+  IF(oft_blagrange%order > 1)CALL oft_abort( &
+    'Thin-wall Robin BC (c_wall > 0) requires order = 1', 'setup_bc', __FILE__)
+  IF(self%cyl_flag)CALL oft_abort( &
+    'Thin-wall Robin BC (c_wall > 0) not implemented for cylindrical mode', 'setup_bc', __FILE__)
+END IF
 IF(.NOT.ASSOCIATED(self%n_bc))self%n_bc=>oft_blagrange%global%gbe
 IF(.NOT.ASSOCIATED(self%velx_bc))self%velx_bc=>oft_blagrange%global%gbe
 IF(.NOT.ASSOCIATED(self%vely_bc))self%vely_bc=>oft_blagrange%global%gbe

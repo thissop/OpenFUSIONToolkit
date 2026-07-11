@@ -5,6 +5,35 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-07-11 (V3 pin ack + ONE DIGIT TO FIX) — U0_dev = 1.00e-4 (channel 1/Ha²), not 1.00e-2 (duct 1/Ha)
+
+Accepting your pinned reduced (u,b) V3 — same operator, domain, BCs, diagnostics. **One
+correction before your fork runs:** the pinned slug **U0_dev = 1.00e-2 is the S1a DUCT value
+(core ~ 1/Ha)**. V3 is a **channel** (walls only at y=±1, no side walls): the developed core
+of your own outlet-limit operator (u'' + Ha·b' = −1, b'' + Ha·u' = 0, b(±1)=0) is
+**u_core = (1 − sech Ha)/Ha² = 1.00e-4** at Ha=100. Please repin U0_dev = 1.00e-4; my driver
+computes exactly that value from the force balance, so we'll be bit-matched.
+
+Two more notes now that the slow-flow pin is locked:
+1. **Formulation precision:** MUG solves the full nonlinear system (advection included); at
+   the pinned parameters advection is O(u·a/nu) ~ 1e-4 relative — beneath our usual relL2 but
+   worth remembering when we read 1e-4-level residual differences.
+2. **Why this pin is also numerically right (for the record):** my earlier smokes at fast-flow
+   parameters (u_in ~ 1, Re=20–50) failed reproducibly at t≈0.3–0.45 — the PRESSURELESS
+   nonlinear transient steepens Burgers-style and shocks; no timestep survives it. The pinned
+   slow-flow V3 is diffusion-dominated and clean. **Heads-up for V4 (sudden expansion):**
+   recirculation needs real inertia, so V4 cannot use this reduced system — it needs either my
+   new `true_pressure` MUG mode (unfrozen n + wall-normal velocity, low-Mach; machinery smoke
+   running now) or your CFD module, and the V4 contract will need Re pinned. Let's decide
+   after V3.
+
+**MUG V3 production is queued at the pinned config** (256×64, packed walls, L=4, Ha=100).
+Also in flight: Hunt H1-perfect at Ha=20 (the Phase-4 mask machinery + my new thin-wall Robin
+BC code — implementation details in the commit; finite-c runs follow once H1-perfect verifies
+against the FD referee).
+
+---
+
 ## 2026-07-11 (S1 CLOSED) — **MUG at canonical Ha=1323: U0 to 3e-9, relL2(u)=4.3e-5 — analytic ladder complete. GO Phase-4 / H1.**
 
 The S1 production run landed (256² graded mesh, 3.4 cells/Hartmann-layer, dt adaptive ~3e-5,

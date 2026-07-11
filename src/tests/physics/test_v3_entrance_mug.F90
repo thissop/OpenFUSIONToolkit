@@ -48,9 +48,20 @@ REAL(r8) :: gamma       = 1.67d0
 REAL(r8) :: den_scale   = 5.98d26
 REAL(r8) :: lin_tol     = 1.d-9
 REAL(r8) :: nl_tol      = 1.d-7
+REAL(r8) :: inlet_delta = 5.d-2      !< inlet slug smoothing width (kills the
+                                     !  slug/no-slip corner singularity; physically
+                                     !  equivalent a few delta downstream)
+LOGICAL :: true_pressure = .FALSE.   !< unfreeze n (pressure force active; n Dirichlet
+                                     !  at outlet only = downstream pressure level) and
+                                     !  velz (wall-normal flow, needed by continuity).
+                                     !  The pressureless reduced system shocks during
+                                     !  the entrance transient; this is the well-posed
+                                     !  low-Mach formulation. Set t0 so Mach << 1 with
+                                     !  acoustic CFL manageable (e.g. t0 = 3e-4).
 LOGICAL :: pm = .FALSE.
 NAMELIST/v3_options/ order, nsteps, rst_freq, ittarget, dt, a_half, xlen, B0, eta, &
-  nu, fx, n0, t0, chi, D_diff, gamma, den_scale, lin_tol, nl_tol, pm
+  nu, fx, n0, t0, chi, D_diff, gamma, den_scale, lin_tol, nl_tol, inlet_delta, &
+  true_pressure, pm
 
 TYPE(oft_xmhd_2d_sim) :: mhd_sim
 TYPE(multigrid_mesh) :: mg_mesh
@@ -96,12 +107,32 @@ IF(oft_env%head_proc)THEN
 END IF
 
 !---Boundary conditions (coordinate-based masks; order=1 => DOF = vertex)
-! n, T, vely, velz frozen everywhere:
+! T, vely always frozen. Reduced mode: n, velz frozen too (pressureless).
+! true_pressure mode: n free except outlet (downstream pressure level); velz
+! free except walls + inlet (wall-normal flow driven by continuity).
 ALLOCATE(mhd_sim%n_bc(ML_oft_blagrange%current_level%ne))
 mhd_sim%n_bc = .TRUE.
 mhd_sim%t_bc => mhd_sim%n_bc
 mhd_sim%vely_bc => mhd_sim%n_bc
-mhd_sim%velz_bc => mhd_sim%n_bc
+IF(true_pressure)THEN
+  ALLOCATE(mhd_sim%velz_bc(ML_oft_blagrange%current_level%ne))
+  mhd_sim%velz_bc = .FALSE.
+  BLOCK
+  INTEGER(i4) :: ib
+  mhd_sim%n_bc = .FALSE.
+  DO ib=1,mg_mesh%smesh%np
+    IF(ABS(mg_mesh%smesh%r(1,ib) - xlen) < btol) mhd_sim%n_bc(ib) = .TRUE.      ! outlet
+    IF(ABS(ABS(mg_mesh%smesh%r(2,ib)) - a_half) < btol) mhd_sim%velz_bc(ib) = .TRUE. ! walls
+    IF(ABS(mg_mesh%smesh%r(1,ib)) < btol) mhd_sim%velz_bc(ib) = .TRUE.          ! inlet
+  END DO
+  END BLOCK
+  ! T must stay frozen with its own full mask (n_bc no longer all-true):
+  ALLOCATE(mhd_sim%t_bc(ML_oft_blagrange%current_level%ne))
+  mhd_sim%t_bc = .TRUE.
+  mhd_sim%vely_bc => mhd_sim%t_bc
+ELSE
+  mhd_sim%velz_bc => mhd_sim%n_bc
+END IF
 ! velx: Dirichlet at walls (no-slip) and inlet (slug); FREE at outlet:
 ALLOCATE(mhd_sim%velx_bc(ML_oft_blagrange%current_level%ne))
 mhd_sim%velx_bc = .FALSE.
@@ -124,10 +155,11 @@ END DO
 CALL ML_oft_blagrange%vec_create(u)
 CALL u%set(n0);    CALL u%get_local(vec_vals); CALL mhd_sim%u%restore_local(vec_vals,1)
 DEALLOCATE(vec_vals); NULLIFY(vec_vals)
-! velx = u_in everywhere except exactly 0 at walls (Dirichlet holds initial values)
-CALL u%set(u_in);  CALL u%get_local(vec_vals)
+! velx = smoothed slug everywhere (tanh rolloff over inlet_delta at the walls;
+! Dirichlet holds these values at inlet and walls)
+CALL u%set(0.d0);  CALL u%get_local(vec_vals)
 DO i=1,mg_mesh%smesh%np
-  IF(ABS(ABS(mg_mesh%smesh%r(2,i)) - a_half) < btol) vec_vals(i) = 0.d0
+  vec_vals(i) = u_in*TANH((a_half - ABS(mg_mesh%smesh%r(2,i)))/inlet_delta)
 END DO
 CALL mhd_sim%u%restore_local(vec_vals,2)
 DEALLOCATE(vec_vals); NULLIFY(vec_vals)
