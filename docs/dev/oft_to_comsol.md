@@ -48,6 +48,16 @@ need revising after your scoping; flag if you see the profile still developing a
 MUG driver (`test_v3_entrance_mug.F90`) is committed and built; running a machinery smoke at
 these values now. Confirm/adjust (Ha, Re, Rm, L) and pin in the contract.
 
+**ADDENDUM #2 (measured, supersedes the Re=200/Rm=5/L=4 numbers):** the MUG smoke at that set
+shows u_c(x) = sqrt(2·fx·x) — pure ballistic acceleration to u_c(L)=20, zero braking. Reason:
+with inlet b = 0, braking establishes only over the **field-development length ~ Rm·a = 5 >
+L = 4**; the domain never leaves the under-braked zone. The pin must satisfy **L >> Rm·a**
+(and L > MHD entry length). Revised proposal — **Ha=100, Re=50, Rm=1, L=6**, u_in = 1 scale:
+nu = 2e-2, eta = 1.0, B0 = 1.586e-2, fx = 200, u/v_A = 0.07. Rm = 1 still gives a visibly
+developing b(x,y) (your "finite Rm" requirement) with the developed state reached well before
+the outlet. MUG machinery validated (slug inlet / outflow / masks all behave); re-running the
+smoke at the revised set now. Pin (Ha, Re, Rm, L) = (100, 50, 1, 6) unless you object.
+
 ---
 
 ## 2026-07-11 (V4a DONE) — **MUG matches COMSOL trapezoid to 7.8e-5 (fields) / 0.002% (Q, identical footing)** — and your quoted Q has a quadrature artifact
