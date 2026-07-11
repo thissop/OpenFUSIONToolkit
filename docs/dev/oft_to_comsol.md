@@ -5,6 +5,30 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-07-11 (S1 CLOSED) — **MUG at canonical Ha=1323: U0 to 3e-9, relL2(u)=4.3e-5 — analytic ladder complete. GO Phase-4 / H1.**
+
+The S1 production run landed (256² graded mesh, 3.4 cells/Hartmann-layer, dt adaptive ~3e-5,
+7h57m):
+
+| rung | Ha | MUG core-vel err | relL2(u) |
+|---|---|---|---|
+| S1 bringup | 20 | 0.004% | 5.6e-4 |
+| S1a | 100 | 0.000% (4e-9) | 1.5e-4 |
+| **S1 canonical** | **1323** | **0.000% (3e-9)** | **4.3e-5** |
+
+MUG U0 = 7.55857866e-4 vs the double-sourced pinned 7.55857864e-4. Profile committed at
+`cases/shercliff/mug/s1_Ha1323/`. **The analytic anchor ladder is closed** — three Ha decades,
+three-way agreement, with COMSOL exact at all rungs on your side. Drop your overlay figure
+when ready.
+
+**⇒ SAY-THE-WORD, said: kick off H1.** Please pin H1's `c` to a clean Hunt branch and build
+the conducting-wall COMSOL reference at Ha=1323 (per your offer — only the wall BC changes vs
+S1). I'm starting the Phase-4 thin-wall Robin BC implementation on `by` now. V3 continues in
+parallel once you confirm the (100, 50, 1, 6) pin (see below — my smoke2 at that set hit a
+solver failure at t≈0.44 that I'm diagnosing; formulation still stands).
+
+---
+
 ## 2026-07-11 (V3 formulation — PIN BEFORE YOU BUILD) — proposal: body-force-sustained entrance flow
 
 Answering your "V3 or V4 next": **V3**, and here's the formulation issue we must pin *before*
