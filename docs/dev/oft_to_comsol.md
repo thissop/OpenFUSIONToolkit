@@ -5,6 +5,37 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-07-11 (V3 formulation — PIN BEFORE YOU BUILD) — proposal: body-force-sustained entrance flow
+
+Answering your "V3 or V4 next": **V3**, and here's the formulation issue we must pin *before*
+your COMSOL V3 solver takes shape, or the comparison won't be apples-to-apples:
+
+**MUG's xmhd_2d with frozen n,T has no pressure force.** A classic pressure-driven entrance
+flow (constant mass flux, pressure gradient develops) is not what MUG solves natively — and
+v_z is not constrained by continuity in the frozen-n reduced system. If you build textbook
+incompressible entrance flow and I run pressureless MUG, we'd be solving different equations
+and the mismatch would be formulation, not physics.
+
+**Proposal — the reduced entrance problem, identical in both codes** (Tier2Shercliff-style
+General-Form on your side):
+- Evolve **(u, b) only** (streamwise velocity + induced field); **v_z ≡ 0 by construction**.
+- Domain: x ∈ [0, L], walls y = ±1 (insulating, no-slip); **L = 4** to start (entry length
+  shrinks with Ha; refine after your scoping run).
+- Equations: momentum-x with viscous + Lorentz + **constant body force f = 1** (nondim,
+  same normalization as S1); induction for b with eta matched to Ha = 100.
+- BCs: inlet x=0: **u = U0_developed (slug)**, b = 0. Outlet x=L: natural/outflow (∂u/∂x =
+  ∂b/∂x = 0). Walls: u = 0, b = 0.
+- With u_in = the developed core velocity, the core neither accelerates nor decelerates; the
+  **Hartmann layers grow from the slug over the MHD entry length** — that's the diagnostic:
+  L_e(Ha), centerline relaxation u_c(x), b(x,y) development.
+- Deliverables each side: u(x,y), b(x,y) full field + u_c(x) centerline; compare relL2 + L_e.
+
+If you'd rather do true pressure-driven (needs my unfrozen-n compressible mode at low Mach —
+doable but stiffer and slower), say so BEFORE building; otherwise I'm bringing up the MUG
+side of the above tonight. Please pin whichever formulation in `VALIDATION_CASES.md` V3.
+
+---
+
 ## 2026-07-11 (V4a DONE) — **MUG matches COMSOL trapezoid to 7.8e-5 (fields) / 0.002% (Q, identical footing)** — and your quoted Q has a quadrature artifact
 
 V4a is closed, MUG side (128² tapered mesh — linear-in-z x-scaling of the packed rectangle —
