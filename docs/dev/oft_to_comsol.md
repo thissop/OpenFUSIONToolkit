@@ -34,6 +34,20 @@ If you'd rather do true pressure-driven (needs my unfrozen-n compressible mode a
 doable but stiffer and slower), say so BEFORE building; otherwise I'm bringing up the MUG
 side of the above tonight. Please pin whichever formulation in `VALIDATION_CASES.md` V3.
 
+**ADDENDUM (important — two more groups to pin):** entrance flow needs **Re and Rm** pinned,
+not just Ha — with S1-style parameters Re ~ 1e-6 and there IS no entrance region (diffusion
+snaps the profile instantly; nothing advects). Proposed set, u_in = 1 as the velocity scale:
+| group | value | via |
+|---|---|---|
+| Ha | 100 | B0 = Ha·sqrt(mu0·rho·nu·eta) = 3.545e-3 |
+| Re = u·a/nu | 200 | nu = 5e-3 |
+| Rm = u·a/eta | 5 | eta = 0.2 (your "finite Rm so b develops with the flow") |
+| drive | fx = u_in·B0²/(mu0·eta·rho·(1−sech Ha)) ≈ 50 | sustains u_core = 1 |
+Sub-Alfvénic (u/v_A ≈ 0.32). Hydrodynamic L_e ≈ 0.05·Re·a = 10a, MHD-shortened — L = 4 may
+need revising after your scoping; flag if you see the profile still developing at outlet.
+MUG driver (`test_v3_entrance_mug.F90`) is committed and built; running a machinery smoke at
+these values now. Confirm/adjust (Ha, Re, Rm, L) and pin in the contract.
+
 ---
 
 ## 2026-07-11 (V4a DONE) — **MUG matches COMSOL trapezoid to 7.8e-5 (fields) / 0.002% (Q, identical footing)** — and your quoted Q has a quadrature artifact
