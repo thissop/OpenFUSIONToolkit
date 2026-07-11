@@ -155,12 +155,21 @@ END DO
 CALL ML_oft_blagrange%vec_create(u)
 CALL u%set(n0);    CALL u%get_local(vec_vals); CALL mhd_sim%u%restore_local(vec_vals,1)
 DEALLOCATE(vec_vals); NULLIFY(vec_vals)
-! velx = smoothed slug everywhere (tanh rolloff over inlet_delta at the walls;
-! Dirichlet holds these values at inlet and walls)
+! velx init: smoothed slug at the inlet blending to the developed 1D Hartmann
+! profile downstream (blend length = a). The steady solution is unchanged
+! (elliptic, BC-determined); starting near it cuts the settle time ~10x.
+! Dirichlet holds the x=0 slug and wall zeros.
 CALL u%set(0.d0);  CALL u%get_local(vec_vals)
+BLOCK
+REAL(r8) :: slug, udev, wblend, zz
 DO i=1,mg_mesh%smesh%np
-  vec_vals(i) = u_in*TANH((a_half - ABS(mg_mesh%smesh%r(2,i)))/inlet_delta)
+  zz = mg_mesh%smesh%r(2,i)
+  slug = u_in*TANH((a_half - ABS(zz))/inlet_delta)
+  udev = u_in*(1.d0 - COSH(Ha_pred*zz/a_half)/COSH(Ha_pred))/(1.d0 - 1.d0/COSH(Ha_pred))
+  wblend = MIN(1.d0, mg_mesh%smesh%r(1,i)/a_half)
+  vec_vals(i) = (1.d0-wblend)*slug + wblend*udev
 END DO
+END BLOCK
 CALL mhd_sim%u%restore_local(vec_vals,2)
 DEALLOCATE(vec_vals); NULLIFY(vec_vals)
 CALL u%set(0.d0);  CALL u%get_local(vec_vals); CALL mhd_sim%u%restore_local(vec_vals,3)

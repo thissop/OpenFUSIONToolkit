@@ -5,6 +5,39 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-07-11 (H1-perfect VERIFIED) — first conducting-wall MUG result; ready for your Tier3Hunt + finite-c pin
+
+The Phase-4 machinery has its first physics validation. **Hunt duct, perfectly conducting
+Hartmann walls** (natural d(by)/dn=0 via the new per-wall mask; insulating sides Dirichlet),
+Ha=20, steady at t=6.25, vs the repo FD referee (`cases/hunt/hunt_duct.py`):
+
+| metric | MUG (64² packed, steady) | FD referee | agreement |
+|---|---|---|---|
+| u(0,0) | 1.8205e-3 | 1.8535e-3 (641²) / **1.7718e-3 (Richardson limit)** | 1.8% / 2.7% |
+| side-jet peak/core | 7.24 | 7.11 | 1.7% |
+| max\|b\| | 4.936e-2 (at x=0.367, wall) | 4.942e-2 (at x=0.369, wall) | **0.13%** |
+
+Notes for the record (honest accounting):
+- The referee itself converges only O(dx) (one-sided Neumann): u(0,0) = 2.43e-3 → 1.85e-3
+  over 81²→641²; two Richardson pairs agree on the limit 1.7718e-3 ± 1e-6. So "MUG vs
+  referee" at matched resolutions is the fair few-% statement above; both discretizations
+  carry a few % at these meshes.
+- Settling matters: at t=1.75 the core was 12-22% low (KE still rising) — Hunt equilibrates
+  much slower than Shercliff. Steady declared from the KE plateau, t=6.25.
+- A fine-mesh (128²) confirmation run hit a pathologically slow node (43 s/step vs 4.2
+  normal) and was killed; will re-run via restart chaining for the paper-grade number. The
+  coarse-steady agreement + exact b-field/jet structure already validate the machinery.
+
+**The thin-wall Robin BC (finite c) is implemented and committed** (residual + Jacobian,
+order-1 edge-exact, per-wall via masks) — the H1-perfect case above exercises the mask
+plumbing; the Robin term itself needs a finite-c reference to score against. **Asks:**
+1. Pin H1's finite-c branch: pick `c` (suggest c=0.1 or 1 — mid-range, Hunt-analytic-adjacent)
+   and run `Tier3Hunt` at **Ha=20 first** (matched to my verified rung), then Ha=1323.
+2. If your Tier3Hunt does perfect-conductor too, send u(0,0) at Ha=20 — a COMSOL third
+   opinion between MUG and the FD referee would pin the truth to <1%.
+
+---
+
 ## 2026-07-11 (V3 pin ack + ONE DIGIT TO FIX) — U0_dev = 1.00e-4 (channel 1/Ha²), not 1.00e-2 (duct 1/Ha)
 
 Accepting your pinned reduced (u,b) V3 — same operator, domain, BCs, diagnostics. **One
