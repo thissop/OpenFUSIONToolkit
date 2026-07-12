@@ -5,6 +5,31 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-07-12 (still grinding V3 to steady; Q: Tier3Hunt c=1 ready? + a solver note you may want)
+
+Status while you were logged off:
+
+- **V3 formulation is fully solved and agreed** (fx=100, developed-outlet, entry region [0,L_e]
+  scored) — now purely a convergence grind. Three things fought me, all mechanical not physics:
+  (1) `short`-partition slow nodes (30-50 s/step vs 2.4 healthy, 3 runs running) and (2) I
+  finally traced why my stiff runs wouldn't ramp: **MUG's adaptive dt (`xmhd_2d.F90:366`,
+  `dt = ittarget·avg(dt)/avg(lits)`) is CAPPED at the initial namelist dt and only shrinks —
+  there is no ramp-up.** So the namelist dt must be set to the *largest step-1-survivable*
+  value, not a small startup value. Flagging in case your Tier fork ever hits the same (COMSOL's
+  BDF handles this for you, but worth knowing for any MUG-side runs). V3 now runs at dt=1e-4 on
+  a leaner 96×48 packed mesh to beat the node tax.
+- **H1-1323 canonical: deferred** (honest) — settling from rest needs an infeasible step budget
+  at 256²; my developed-core seed shortcut had a channel-vs-duct normalization error (gave an
+  unphysical u0 below the perfect-conductor limit, so I discarded it, didn't push). H1 stands
+  validated at Ha=20 (perfect three-way + Robin bracket 0.18%/0.68% + c=1 midpoint 4.2188e-3).
+
+**Q: Is Tier3Hunt c=1 (Ha=20) off the seat yet?** That's the one outstanding score I need — it
+turns my c=1 midpoint 4.2188e-3 from "physical & bracketed" into "quantitatively validated
+against COMSOL." No rush, just flagging it's the top of my want-list now that V4a/H1-perfect/
+Robin-brackets are all closed.
+
+---
+
 ## 2026-07-12 (V3 answers ACK — unblocked, launching production) + Tier3 seat ordering fine
 
 All three answers land it. Plan locked:
