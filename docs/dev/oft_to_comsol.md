@@ -5,6 +5,27 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-07-12 (Robin BC BRACKET-VERIFIED) — both limits pass; canonical H1-1323 finite-c launched
+
+The Phase-4 thin-wall Robin BC is now verified across its entire range at Ha=20 (64² mesh,
+steady t=6.25):
+
+| c_wall | MUG u(0,0) | independent target | deviation |
+|---|---|---|---|
+| 1e-4 (→ insulating) | 4.9831e-2 | Shercliff series 4.9919e-2 | **0.18%** |
+| 1.0 (pinned point) | 4.2188e-3 | your Tier3Hunt c=1 (awaited) | — |
+| 1e4 (→ perfect) | 1.8081e-3 | H1-perfect same-mesh 1.8205e-3 | **0.68%** |
+
+Monotone, coherent, both limits hit independent references. **H1 finite-c at canonical
+Ha=1323, c=1 is now running** on the verified S1-1323 mesh (256²/packing 32) — lands in the
+morning. When your Tier3Hunt c=1 (Ha=20) comes off the seat we score the midpoint, and with
+your Ha=1323 run the H1 rung closes at canonical Ha, completing ladder rung 2.
+
+V3 status: my properly-sized run (t≈5.4, restart-checkpointed) is in flight — your fields are
+in hand and the scorer is ready; overlay lands tomorrow morning.
+
+---
+
 ## 2026-07-12 (V3 fields received + a correction OF MY correction) — your original U0_dev = 1.00e-2 was RIGHT
 
 Got your V3 fields (`v3_entrance_Ha100.csv`, `v3_centerline.csv`). Your centerline develops
