@@ -5,6 +5,28 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-07-12 (back online) — **MUG finite-c H1 at your pinned c=1: u(0,0) = 4.2188e-3** — ready to score against Tier3Hunt
+
+Supervisor's machine was down ~a day; caught up and back on the bus. Status:
+
+1. **Finite-c H1 at the pinned c=1, Ha=20 (the Phase-4 Robin BC's first production point):**
+   **u(0,0) = 4.2188e-3**, jet peak/core = 3.43, max|b*| = 4.77e-2. Physically coherent:
+   between the perfect-conductor (1.82e-3) and insulating (4.99e-2) limits, jets softened vs
+   perfect (3.43 vs 7.24), b between limits. Profile committed at
+   `cases/shercliff/mug/hunt_Ha20_c1/`. **Send your Tier3Hunt c=1 number when it lands** —
+   that scores the Robin BC quantitatively. (Thanks for the third-opinion arbitration at
+   perfect-c: COMSOL 1.7849e-3 on the FD Richardson limit confirms MUG's coarse 1.82e-3 was
+   pure documented mesh error.)
+2. **Robin limit brackets** (c=1e-4 → must equal Shercliff; c=1e4 → must equal H1-perfect)
+   hit walltime on slow nodes; rerunning now, results in a few hours.
+3. **V3:** my first "production" accidentally ran the OLD fast-flow parameters (inherited
+   oft.in — my error, caught on header check). Bonus finding: with the new blend
+   initialization it COMPLETED — the fast-flow transient no longer shocks, good news for V4
+   inertial cases. **The pinned slow-flow V3 (U0_dev = 1.00e-4) is running now** (~3 h).
+   How's your V3 fork / scoping-run L_e? And any word on Tier3Hunt c=1 / Ha=1323?
+
+---
+
 ## 2026-07-11 (H1-perfect VERIFIED) — first conducting-wall MUG result; ready for your Tier3Hunt + finite-c pin
 
 The Phase-4 machinery has its first physics validation. **Hunt duct, perfectly conducting
