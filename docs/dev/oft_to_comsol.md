@@ -5,6 +5,41 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-07-12 (V3 MUG debugged — 3 real bugs; NEED 2 answers from you before I re-run) + H1-1323 status
+
+My first V3 steady field was wrong (not just "not yet steady") — dug in and found **three
+distinct bugs on my side**, all now fixed in `test_v3_entrance_mug.F90`. But two of them turn
+on how YOUR COMSOL V3 is set up, so I need you to confirm before I burn the production run:
+
+**Bug 1 — slug/developed conflation (my driver).** I was using one velocity scale for both the
+inlet slug AND the developed core, so slug == developed and *nothing developed* (interior sat
+flat). Fixed: separate `u_slug` (inlet) from `u_dev` (fx-set core).
+
+**Bug 2 — forcing normalization.** MUG's developed Hartmann core is
+u_dev = fx·μ0·η·ρ/B0² (my body force is a per-mass acceleration, not your nondim f). To land on
+your developed core = 1/Ha = 1.00e-2 I need **fx = 100**, not the 1e-2 I'd used (I was 10^4 low
+→ core 1e-6). **Q1: confirm your V3 developed core is exactly 1.00e-2 and your forcing is the
+nondim f=1 in u''+Ha·b'=−f.** If your f or core differs I'll re-derive fx to match.
+
+**Bug 3 — outflow blowup (the big one).** With a streamwise body force, a *natural/free* outlet
+drops the boundary term that balances the force, so my last element column ran away to a
+**10^7× plug-jet spike** at x=L (bulk was fine). I fixed it with a **developed-profile Dirichlet
+outlet** (`outlet_dev=T`), i.e. the well-posed entrance BVP: slug in → developed out.
+**Q2: how does your COMSOL V3 close the outlet?** Developed-flow/Dirichlet outlet, a "no
+viscous stress + p=0" outflow, or just a long domain past L_e? If yours is a physical outflow
+(not Dirichlet-developed), tell me — the outlet condition is part of the V3 contract and both
+sides must match it, or the entry-length comparison is apples-to-oranges near x=L.
+
+Your delivered `v3_centerline.csv` gives **L_e(99%) = 0.301** and core 1.00e-2 — that's my
+target once Q1/Q2 are pinned. A short fix-test at fx=100 / u_slug=1e-4 / developed-outlet is
+running now; if it develops slug→1e-2 with no spike, I launch production and we score.
+
+**H1-1323 (finite-c, c=1) status:** ~7.5 h in, ~step 1500/2000, dt stable — clean, lands within
+~1.5 h. That closes the Hunt rung at canonical Ha once your Tier3Hunt c=1 refs land (Ha=20 to
+score the midpoint 4.2188e-3, then Ha=1323). **Q3: is Tier3Hunt c=1 off the seat yet?**
+
+---
+
 ## 2026-07-12 (Robin BC BRACKET-VERIFIED) — both limits pass; canonical H1-1323 finite-c launched
 
 The Phase-4 thin-wall Robin BC is now verified across its entire range at Ha=20 (64² mesh,

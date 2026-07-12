@@ -51,6 +51,7 @@ REAL(r8) :: nl_tol      = 1.d-7
 REAL(r8) :: inlet_delta = 5.d-2      !< inlet slug smoothing width (kills the
                                      !  slug/no-slip corner singularity; physically
                                      !  equivalent a few delta downstream)
+REAL(r8) :: u_slug = -1.d0           !< inlet slug speed; <0 => auto = u_dev/Ha
 LOGICAL :: true_pressure = .FALSE.   !< unfreeze n (pressure force active; n Dirichlet
                                      !  at outlet only = downstream pressure level) and
                                      !  velz (wall-normal flow, needed by continuity).
@@ -58,15 +59,22 @@ LOGICAL :: true_pressure = .FALSE.   !< unfreeze n (pressure force active; n Dir
                                      !  the entrance transient; this is the well-posed
                                      !  low-Mach formulation. Set t0 so Mach << 1 with
                                      !  acoustic CFL manageable (e.g. t0 = 3e-4).
+LOGICAL :: outlet_dev = .FALSE.  !< pin the outlet velx to the analytic developed
+                                 !  Hartmann profile (Dirichlet) instead of natural
+                                 !  outflow. Required with a streamwise body force:
+                                 !  the free outlet drops the term balancing fx, so the
+                                 !  last element column accelerates ballistically
+                                 !  (measured 1e7x spike). Well-posed entrance BVP:
+                                 !  slug inlet -> developed outlet.
 LOGICAL :: pm = .FALSE.
 NAMELIST/v3_options/ order, nsteps, rst_freq, ittarget, dt, a_half, xlen, B0, eta, &
   nu, fx, n0, t0, chi, D_diff, gamma, den_scale, lin_tol, nl_tol, inlet_delta, &
-  true_pressure, pm
+  u_slug, true_pressure, outlet_dev, pm
 
 TYPE(oft_xmhd_2d_sim) :: mhd_sim
 TYPE(multigrid_mesh) :: mg_mesh
 CLASS(oft_vector), POINTER :: u => NULL()
-REAL(r8) :: Ha_pred, rho, u_in
+REAL(r8) :: Ha_pred, rho, u_in, u_dev
 REAL(r8), PARAMETER :: btol = 1.d-8
 
 CALL oft_init
@@ -98,12 +106,20 @@ mhd_sim%body_force = [fx, 0.d0, 0.d0]   ! streamwise drive sustains developed re
 
 rho = proton_mass * n0 * den_scale
 Ha_pred = B0 * a_half / SQRT(mu0 * eta * rho * nu)
-! developed core velocity of the insulating Hartmann channel (high-Ha limit
-! G/(sigma*B0^2) with the cosh correction), used as the slug inlet speed
-u_in = fx * mu0 * eta * rho / B0**2 * (1.d0 - 1.d0/COSH(Ha_pred))
+! DEVELOPED core velocity of the insulating Hartmann channel: momentum balance
+! fx = (sigma*B0^2/rho)*u_dev with sigma = 1/(mu0*eta) => u_dev = fx*mu0*eta*rho/B0^2.
+! This is the fx-determined steady core (the OUTLET/developed amplitude). To match
+! COMSOL's nondim reduced operator (core = 1/Ha), set fx so u_dev = 1/Ha.
+u_dev = fx * mu0 * eta * rho / B0**2
+! INLET slug is a SEPARATE, smaller scale (u_slug, pinned; default u_dev/Ha) so the
+! flow genuinely develops slug->u_dev over the entry length. Conflating them (the
+! prior version used one u_in for both) meant slug==developed and nothing developed.
+IF(u_slug < 0.d0) u_slug = u_dev / Ha_pred
+u_in = u_slug   ! back-compat name used in the slug init below
 IF(oft_env%head_proc)THEN
   WRITE(*,'(A,ES12.4)') 'Predicted Ha = ', Ha_pred
-  WRITE(*,'(A,ES12.4)') 'Slug inlet u_in = ', u_in
+  WRITE(*,'(A,ES12.4)') 'Inlet slug u_slug = ', u_slug
+  WRITE(*,'(A,ES12.4)') 'Developed core u_dev = ', u_dev
 END IF
 
 !---Boundary conditions (coordinate-based masks; order=1 => DOF = vertex)
@@ -149,6 +165,8 @@ DO i=1,mg_mesh%smesh%np
     mhd_sim%velx_bc(i) = .TRUE.
     mhd_sim%psi_bc(i) = .TRUE.
   END IF
+  IF(outlet_dev .AND. ABS(mg_mesh%smesh%r(1,i) - xlen) < btol) &
+    mhd_sim%velx_bc(i) = .TRUE.                                                   ! outlet -> developed
 END DO
 
 !---Initial conditions: slug flow everywhere (walls pinned at 0 by BC init below)
@@ -164,8 +182,9 @@ BLOCK
 REAL(r8) :: slug, udev, wblend, zz
 DO i=1,mg_mesh%smesh%np
   zz = mg_mesh%smesh%r(2,i)
-  slug = u_in*TANH((a_half - ABS(zz))/inlet_delta)
-  udev = u_in*(1.d0 - COSH(Ha_pred*zz/a_half)/COSH(Ha_pred))/(1.d0 - 1.d0/COSH(Ha_pred))
+  ! slug uses u_slug amplitude; developed profile uses u_dev (fx-set core).
+  slug = u_slug*TANH((a_half - ABS(zz))/inlet_delta)
+  udev = u_dev*(1.d0 - COSH(Ha_pred*zz/a_half)/COSH(Ha_pred))
   wblend = MIN(1.d0, mg_mesh%smesh%r(1,i)/a_half)
   vec_vals(i) = (1.d0-wblend)*slug + wblend*udev
 END DO
