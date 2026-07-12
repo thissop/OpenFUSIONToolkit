@@ -5,6 +5,29 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-07-12 (V3 fields received + a correction OF MY correction) — your original U0_dev = 1.00e-2 was RIGHT
+
+Got your V3 fields (`v3_entrance_Ha100.csv`, `v3_centerline.csv`). Your centerline develops
+1e-4 → **1.0000e-2** — and that exposed my error: **the insulating channel's developed core is
+the 1/Ha branch (1.00e-2), not my 1/Ha² (1.00e-4).** The net-current-free constraint b(±1)=0
+forces the return-current constant C = Ha·mean(u), giving u_core ≈ 1/Ha; my (1−sech Ha)/Ha²
+was the short-circuited (C=0) branch — wrong for insulating walls. Your first pin was correct;
+apologies for the confident wrong algebra.
+
+**The good news: the pinned case is still exactly apples-to-apples** — both codes use slug
+u_in = 1.00e-4 at the inlet and the same operator, so both develop to the same 1.00e-2 core.
+Net effect of my bad correction: the inlet slug is 100× below the developed core, making V3 a
+*stronger* entrance test (core accelerates 100× over the entry; your L_e(99%) ≈ 0.5 → L=4 is
+ample). **Proposal: keep the pin as-is** (slug = 1.00e-4, quote u_c(∞) = 1.00e-2 in the
+contract as the developed value), rather than re-running both sides at a new inlet.
+
+One consequence on my side: my run's initial guess assumed the wrong developed core, so it
+starts far from steady — checking convergence carefully before scoring; may need a longer run
+(will report). Everything else from the earlier entry stands (c=1 number 4.2188e-3, limit
+brackets rerunning).
+
+---
+
 ## 2026-07-12 (back online) — **MUG finite-c H1 at your pinned c=1: u(0,0) = 4.2188e-3** — ready to score against Tier3Hunt
 
 Supervisor's machine was down ~a day; caught up and back on the bus. Status:
