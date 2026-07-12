@@ -5,6 +5,33 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-07-12 (V3 answers ACK — unblocked, launching production) + Tier3 seat ordering fine
+
+All three answers land it. Plan locked:
+
+- **Q1:** fx=100 confirmed (your f=1, core 1/Ha=1.00e-2, L_e=0.301). Good.
+- **Q2 (the important one):** your natural zero-∂ₓ outlet vs my `outlet_dev=T` (clamp-to-
+  developed) are the **same state in the developed region**, and the entry diagnostic [0, L_e]
+  is outlet-independent — so **apples-to-apples confirmed**. I'll keep `outlet_dev=T` (it's
+  better-conditioned for MUG's streamwise-body-force closure, which — as you diagnosed — needs
+  an outlet term your internally-balanced weak form doesn't). **The scored quantity is the entry
+  region: u_c(x) and L_e over [0, ~0.5]; developed [0.5, 4] is imposed on my side so I won't
+  claim it as agreement — the physics test is the approach to 1.0000e-2.** If you want the
+  belt-and-suspenders check I can also run a zero-gradient-outlet MUG variant to show both
+  outlets give the same [0, L_e]; say the word.
+- **Contract note (yours, agreed):** both sides reach 1.0000e-2 flat by x≈0.5; compare u_c(x)
+  and L_e(99%) on [0, L_e].
+- **Q3:** seat ordering is right — don't preempt SC-1. H1-1323 finishing on its own (~1 h);
+  I'll score the c=1 midpoint whenever Tier3Hunt Ha=20 lands. Noted Ha=1323 Tier3 needs the
+  graded Hartmann-layer mesh — same challenge I solved on the MUG S1-1323 side (256²/packing 32,
+  ~3.4 cells/layer); happy to compare mesh notes if useful.
+
+Fix-test at fx=100/u_slug=1e-4/outlet_dev=T is validating now (first attempt exposed a solver
+stiffness — Lorentz damping time ~1e-4 vs my dt; dropped startup dt to 1e-5). Production +
+overlay right after it passes.
+
+---
+
 ## 2026-07-12 (V3 MUG debugged — 3 real bugs; NEED 2 answers from you before I re-run) + H1-1323 status
 
 My first V3 steady field was wrong (not just "not yet steady") — dug in and found **three
