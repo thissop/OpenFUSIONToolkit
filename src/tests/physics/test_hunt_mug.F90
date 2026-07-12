@@ -45,9 +45,15 @@ REAL(r8) :: nl_tol      = 1.d-7
 REAL(r8) :: c_wall      = 0.d0       !< Hartmann-wall conductance ratio: 0 = perfect
                                      !  conductor (natural d(by)/dn=0, Hunt's case);
                                      !  >0 = thin-wall Robin (Phase-4 finite c)
+CHARACTER(LEN=80) :: restart_file = ''  !< if set, continue from this .rst instead of
+                                        !  building ICs from scratch (restart-chaining
+                                        !  for slow-settling high-Ha conjugate cases; the
+                                        !  vector, t, and dt are all restored from the file)
+INTEGER(i4) :: rst_base = 0             !< output restart index offset (continue numbering)
 LOGICAL :: pm = .FALSE.
 NAMELIST/hunt_options/ order, nsteps, rst_freq, ittarget, dt, a_half, B0, eta, &
-  nu, fy, n0, t0, chi, D_diff, gamma, den_scale, lin_tol, nl_tol, c_wall, pm
+  nu, fy, n0, t0, chi, D_diff, gamma, den_scale, lin_tol, nl_tol, c_wall, &
+  restart_file, rst_base, pm
 
 TYPE(oft_xmhd_2d_sim) :: mhd_sim
 TYPE(multigrid_mesh) :: mg_mesh
@@ -109,24 +115,35 @@ DO ip=1,mg_mesh%smesh%np
 END DO
 END BLOCK
 
-!---Initial conditions: fluid at rest, uniform n and T, no field perturbation
+!---Initial conditions
 CALL ML_oft_blagrange%vec_create(u)
-CALL u%set(n0);    CALL u%get_local(vec_vals); CALL mhd_sim%u%restore_local(vec_vals,1)
-DEALLOCATE(vec_vals); NULLIFY(vec_vals)
-CALL u%set(0.d0);  CALL u%get_local(vec_vals); CALL mhd_sim%u%restore_local(vec_vals,2)
-DEALLOCATE(vec_vals); NULLIFY(vec_vals)
-CALL u%set(0.d0);  CALL u%get_local(vec_vals); CALL mhd_sim%u%restore_local(vec_vals,3)
-DEALLOCATE(vec_vals); NULLIFY(vec_vals)
-CALL u%set(0.d0);  CALL u%get_local(vec_vals); CALL mhd_sim%u%restore_local(vec_vals,4)
-DEALLOCATE(vec_vals); NULLIFY(vec_vals)
-CALL u%set(t0);    CALL u%get_local(vec_vals); CALL mhd_sim%u%restore_local(vec_vals,5)
-DEALLOCATE(vec_vals); NULLIFY(vec_vals)
-CALL u%set(0.d0);  CALL u%get_local(vec_vals); CALL mhd_sim%u%restore_local(vec_vals,6)
-DEALLOCATE(vec_vals); NULLIFY(vec_vals)
-CALL u%set(0.d0);  CALL u%get_local(vec_vals); CALL mhd_sim%u%restore_local(vec_vals,7)
-DEALLOCATE(vec_vals); NULLIFY(vec_vals)
+mhd_sim%rst_base = rst_base
+IF(LEN_TRIM(restart_file) > 0)THEN
+  !---Restart-chaining: continue from a saved state (vector + t + dt restored).
+  ! Enables slow-settling high-Ha conjugate cases to accumulate toward steady
+  ! across multiple walltime-limited jobs, and captures transient waveforms.
+  CALL mhd_sim%rst_load(mhd_sim%u, TRIM(restart_file), 'U', mhd_sim%t, mhd_sim%dt)
+  IF(oft_env%head_proc) WRITE(*,'(A,A,A,ES12.4,A,ES12.4)') &
+    'Restarted from ', TRIM(restart_file), ' at t=', mhd_sim%t, ' dt=', mhd_sim%dt
+ELSE
+  !---Fresh start: fluid at rest, uniform n and T, no field perturbation
+  CALL u%set(n0);    CALL u%get_local(vec_vals); CALL mhd_sim%u%restore_local(vec_vals,1)
+  DEALLOCATE(vec_vals); NULLIFY(vec_vals)
+  CALL u%set(0.d0);  CALL u%get_local(vec_vals); CALL mhd_sim%u%restore_local(vec_vals,2)
+  DEALLOCATE(vec_vals); NULLIFY(vec_vals)
+  CALL u%set(0.d0);  CALL u%get_local(vec_vals); CALL mhd_sim%u%restore_local(vec_vals,3)
+  DEALLOCATE(vec_vals); NULLIFY(vec_vals)
+  CALL u%set(0.d0);  CALL u%get_local(vec_vals); CALL mhd_sim%u%restore_local(vec_vals,4)
+  DEALLOCATE(vec_vals); NULLIFY(vec_vals)
+  CALL u%set(t0);    CALL u%get_local(vec_vals); CALL mhd_sim%u%restore_local(vec_vals,5)
+  DEALLOCATE(vec_vals); NULLIFY(vec_vals)
+  CALL u%set(0.d0);  CALL u%get_local(vec_vals); CALL mhd_sim%u%restore_local(vec_vals,6)
+  DEALLOCATE(vec_vals); NULLIFY(vec_vals)
+  CALL u%set(0.d0);  CALL u%get_local(vec_vals); CALL mhd_sim%u%restore_local(vec_vals,7)
+  DEALLOCATE(vec_vals); NULLIFY(vec_vals)
+END IF
 
-!---March to steady state
+!---March (from rest or from the restart state)
 CALL mhd_sim%run_simulation()
 
 !---Extract vely and by over all mesh points (order=1: DOF=vertex)
