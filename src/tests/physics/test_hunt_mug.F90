@@ -45,7 +45,7 @@ REAL(r8) :: nl_tol      = 1.d-7
 REAL(r8) :: c_wall      = 0.d0       !< Hartmann-wall conductance ratio: 0 = perfect
                                      !  conductor (natural d(by)/dn=0, Hunt's case);
                                      !  >0 = thin-wall Robin (Phase-4 finite c)
-CHARACTER(LEN=80) :: restart_file = ''  !< if set, continue from this .rst instead of
+CHARACTER(LEN=256) :: restart_file = '' !< if set, continue from this .rst instead of
                                         !  building ICs from scratch (restart-chaining
                                         !  for slow-settling high-Ha conjugate cases; the
                                         !  vector, t, and dt are all restored from the file)
