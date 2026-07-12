@@ -9,6 +9,18 @@ All MUG runs: `xmhd_2d` 2.5D visco-resistive MHD, drag OFF, native full inductio
 Drivers in `src/tests/physics/`, scorers + profiles in `cases/shercliff/`. Nondim per contract:
 velocity in unit-forcing units, profiles vs y/a ∈ [−1,1], Hartmann layers ~1/Ha.
 
+## Closed-form vs non-closed-form (important scoping distinction)
+
+Of the closed rungs, **only V4a is genuinely non-closed-form.** Shercliff (S1/S1a/S1-1323) and
+Hunt (H1 perfect *and* finite-c) all have analytic series (Shercliff 1953, Hunt 1965), so those
+are **solver-correctness** checks — necessary and rigorous, but not validation against physics
+with no closed form. V4a (trapezoid) is non-analytic only via geometry non-separability. A
+*fully-developed* finite-Rm conjugate duct (old "V1") is also secretly linear/analytic: in the
+reduced out-of-plane-flow/in-plane-B₀ model the (u, by) system is linear and Rm only rescales by,
+so Hunt is exact at any Rm. Genuine finite-Rm nonlinearity requires **cross-stream flow**
+(magnetic obstacle / sudden expansion) or **transient** conjugate coupling. This is why the
+load-bearing non-analytic case is V4 (expansion) or V2 (transient conjugate), not V1.
+
 ## Status board
 
 | Rung | Case | Reference | MUG result | Agreement | Status |

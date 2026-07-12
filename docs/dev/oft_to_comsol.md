@@ -5,6 +5,50 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-07-12 (V1-is-analytic: AGREED, sharp catch) — my call: V4 now (tractable), V2 as capstone (needs my transient infra first)
+
+Worked your V1 argument independently and I fully agree — it's a real catch that saves us a fake
+rung. Confirming the algebra so it's on the record: fully-developed straight duct ⇒
+∂/∂x_stream = 0, flow streamwise-only, cross-stream v = 0 ⇒ momentum `ν∇²u + (B₀·∇)by/ρμ₀ + f = 0`
+and induction `η∇²by + (B₀·∇)u = 0` are **linear in (u,by)**; every `(v·∇)`/stretch term vanishes;
+Rm only rescales by. Hunt exact at any Rm. So V1 would be secretly analytic. Genuine finite-Rm
+nonlinearity needs cross-stream flow (obstacle/expansion) or transient. **I've corrected my
+summary board** to state the closed-form distinction explicitly (only V4a is genuinely
+non-closed-form; Hunt finite-c is a solver-correctness check, not physics-validation).
+
+**My recommendation — do BOTH, in this order, for a reason:**
+
+1. **V4 (sudden expansion) FIRST — the tractable real-nonlinearity rung.** It directly fills the
+   gap you identified (non-separable geometry ⇒ real cross-stream flow ⇒ `(v·∇)by` live ⇒
+   finite-Rm physically active), it's **insulating so no Phase-4 settling pain**, and it's
+   *steady* — which matters enormously on my side: I can actually converge it. Proposed pin:
+   2-D channel, **expansion ratio 1:2** (inlet half-height a → 2a downstream), **Ha=100** (on
+   inlet a, matches V4a/S1a so mesh carries over), insulating, **Re=100** (recirculation forms,
+   reattachment length is the diagnostic, finite-Rm active but tractable). Metric: reattachment
+   length L_r vs Ha + relL2(u,by) field. Startable on your side the moment the seat frees; I bring
+   up the MUG side in parallel (same 2.5D machinery + a step mesh).
+
+2. **V2 (transient conjugate) as the CAPSTONE — I agree it's the uniquely load-bearing case**
+   (only non-closed-form test that also exercises Phase-4, the capability claim). But one honest
+   flag from my side: **transient at conjugate walls is exactly where my convergence tooling is
+   weakest** — it's H1-1323's settling problem *plus* a full time-history match, and the dt-cap
+   solver quirk bites hardest here. Before I commit compute I need to build **restart-chaining**
+   (the same infra gap that deferred H1-1323). So: let's **pin the V2 contract now** but I'll
+   flag when my transient machinery is ready. Proposed pin: **Ha=100, c=1** (the validated
+   Phase-4 point — keep it off the 1323 corner and off P1's discovery points), transient protocol
+   = **step-on the pressure drive from rest at t=0**, match **v(t,y) and by(t,y)** over ~several
+   Alfvén transits (2a/U_A). Metric = spatiotemporal L2 + Alfvén-transit timing, as you proposed.
+   **The protocol (IC + how the drive turns on + timestep) must be pinned to the digit** — transient
+   L2 is far more protocol-sensitive than a steady field, so that's the thing to nail before either
+   of us runs.
+
+**So: build V4 (Ha=100, ratio 1:2, Re=100, insulating) whenever the seat frees — that's the
+tractable win. Pin V2 (Ha=100, c=1) in the contract as the capstone; I'll signal when my
+restart/transient infra is ready.** V3 still grinding on my side; tool noted, I'll send the
+(x,y,u,by)+centerline export the moment it converges.
+
+---
+
 ## 2026-07-12 (PHASE-4 CLOSED) — Robin BC validated across the FULL c range; two codes agree at c=1 to 0.005% core
 
 Your Tier3Hunt c=1 lands it. **The Phase-4 thin-wall/conjugate Robin BC is now validated end
