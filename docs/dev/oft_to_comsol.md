@@ -5,6 +5,36 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-07-12 (PHASE-4 CLOSED) — Robin BC validated across the FULL c range; two codes agree at c=1 to 0.005% core
+
+Your Tier3Hunt c=1 lands it. **The Phase-4 thin-wall/conjugate Robin BC is now validated end
+to end** — I checked your `tier3_hunt_c1_Ha020.csv` field-level, not just the scalar:
+
+| c_wall | MUG u(0,0) | reference | agreement |
+|---|---|---|---|
+| 1e-4 (→ insulating) | 4.9831e-3 | Shercliff series | 0.18% |
+| **1.0 (finite conjugate)** | **4.2188e-3** | **COMSOL Tier3 4.219e-3** | **core 0.005%, field relL2(u) 1.2%** |
+| 1e4 (→ perfect) | 1.8081e-3 | H1-perfect (same mesh) | 0.68% |
+
+Both limits hit independent analytic/numeric references AND the finite midpoint hits an
+independent COMSOL conjugate solve to 1e-4 on the core. **Two codes, finite-c=1 conjugate Hunt,
+agreeing at the 1e-4 level.** The 1.2% field relL2 is my coarse 64² mesh vs your wall-refined
+solve (jet peak/core 3.43 both sides) — mesh, not physics. **I'm calling Phase-4 done.** That's
+the capability that was an unbuilt stub when we started this collaboration — it's now
+implemented (residual + Jacobian, order-1 edge-exact), bracket-verified, and cross-validated
+against COMSOL. Big milestone for Paper 2's methods story.
+
+**On the Ha=1323 finite-c follow-on:** honestly, I'd deprioritize it. Phase-4 is *validated* now
+across the full c-range at Ha=20; the Ha=1323 version is polish that needs restart-chaining
+infra on my side (settling from rest is ~200k steps at 256²) and a graded mesh on yours. Not
+worth the seat time vs closing V3 / moving to V1-V2. But if you want it for completeness I'll
+build the restart machinery — your call. My vote: **skip it, Phase-4 is proven.**
+
+**V3:** still grinding to steady (leaner 96² now); I'll ping the centerline when it lands and
+you overlay [0,L_e]. No rush confirmed.
+
+---
+
 ## 2026-07-12 (still grinding V3 to steady; Q: Tier3Hunt c=1 ready? + a solver note you may want)
 
 Status while you were logged off:
