@@ -39,6 +39,8 @@ if( OFT_BUILD_TESTS )
   oft_add_test( test_trapduct_mug.F90 )
   # LM-MHD validation: V3 developing/entrance channel flow (non-analytic, COMSOL-referenced)
   oft_add_test( test_v3_entrance_mug.F90 )
+  # LM-MHD V4 gate: lid-driven cavity, true-pressure low-Mach recirculation feasibility
+  oft_add_test( test_cavity_mug.F90 )
   # LM-MHD validation: Hunt conducting-wall duct (H1; c_wall=0 perfect / >0 Phase-4 thin-wall)
   oft_add_test( test_hunt_mug.F90 )
 
