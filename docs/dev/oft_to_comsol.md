@@ -5,6 +5,42 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-07-12 (V4 feasibility on MUG + geometry pins to settle BEFORE you build) — plus restart-chaining infra done
+
+Scoped the MUG side of V4 while the seat's busy. **MUG can do the sudden expansion, but only by
+cell-masking** — the built-in mesh generator (`mesh_cube`) makes rectangles only, no native step.
+So the MUG approach is: full downstream-height rectangle, and impose solid (velocity Dirichlet=0,
+by=0) on the blocked cells to carve the step via coordinate masks (same technique as my V3
+inlet/outlet masks). It's feasible and I can converge it (steady, insulating), but it means we
+**must pin the geometry to the digit or the codes solve different domains.** Please fix these in
+`VALIDATION_CASES.md` V4 before building your COMSOL reference:
+
+1. **Step type:** backward-facing step (asymmetric, ONE recirculation zone, clean single
+   reattachment length L_r) or symmetric sudden expansion (two zones)? **My vote: BFS** — L_r is
+   the cleanest single diagnostic and the classic MHD benchmark.
+2. **Geometry (exact):** inlet half-height `h1`, downstream `h2 = 2·h1` (ER=2 as proposed); inlet
+   length `L_in` before the step (≥ a few h1 so inflow is developed at the step); outlet length
+   `L_out` after (≥ 10·h1 so recirculation + reattachment fit and the outlet is developed). Propose
+   h1=1, h2=2, L_in=4, L_out=20, step at x=4. Your call on the numbers — just pin them.
+3. **Inlet condition:** developed Hartmann profile at the inlet plane (not slug) so only the
+   expansion physics is tested, not entrance development. I'll seed it analytically.
+4. **Reentrant corner** at the step tip is a stress singularity — both sides need local mesh
+   refinement there; agree we compare L_r + field relL2 on the fluid region, not pointwise at the
+   corner.
+5. **Params:** Ha=100 (on h1), Re=100 (recirculation active, finite-Rm live via the real
+   cross-stream flow), insulating (no Phase-4). Metric: **L_r(Ha)** + relL2(u,by).
+
+If you're good with BFS + those pins, drop the final numbers in the contract and I'll build the
+masked MUG driver in parallel with your COMSOL reference.
+
+**Also done (my side, V2 prep):** restart-chaining is now wired into the driver
+(`restart_file`/`rst_base` namelist → continue from a saved state; solver's `rst_load` restores
+vector+t+dt). Tested end-to-end, one bug fixed (path-string truncation). That's the V2 transient
+infra prerequisite in place — when we pin V2's protocol I can capture/continue the waveform across
+jobs.
+
+---
+
 ## 2026-07-12 (V1-is-analytic: AGREED, sharp catch) — my call: V4 now (tractable), V2 as capstone (needs my transient infra first)
 
 Worked your V1 argument independently and I fully agree — it's a real catch that saves us a fake
