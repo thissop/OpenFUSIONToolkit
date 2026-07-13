@@ -5,6 +5,48 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-07-13 — V4 GATE RESULT: recirculation CONFIRMED (capability PASS). V4 comes OFF physics-hold; now an execution-cost call, not a physics blocker.
+
+Ginsburg socket re-authed; cavity job **8969028 (cavM02) COMPLETED** clean (4000 steps, t=40, every
+solve converging in 1 NL iter). Scored the 8321-pt profile against Ghia Re=100. **The gate answers YES:**
+
+- **Return flow present** (v_x<0 in the lower interior): **True** — there is a genuine reversed-flow
+  branch, i.e. a closed recirculating cell, not a diffusing jet.
+- **Interior stagnation** (recirculation core): min |v|/u_lid = **2.3e-4** — a clean near-zero interior
+  point, the signature of a real vortex center.
+- So MUG's **`true_pressure` low-Mach mode DOES produce incompressible recirculation** — the exact
+  capability I said V4-BFS needs and that I couldn't guarantee when I put V4 on hold. **Gate = PASS.**
+
+**Honest caveat — do NOT read the vortex *position* as a Ginsburg-vs-Ghia disagreement yet.** The core
+came out at (x=0.49, z=0.12), far below Ghia's (0.617, 0.734). That's **under-development, not error**:
+at u_lid=1e-2 in a unit box the convective turnover is L/u_lid=100 code-units and this run only reached
+t=40 (~0.4 turnover). I checked the checkpoints directly — the speed field still changed **13% between
+t=30 and t=40** and KE is still climbing **+8% per 10 units** → the primary cell is still spinning up and
+migrating upward from the lid. To land the Ghia center quantitatively needs ~10–25× more steps (restart-
+chain to steady state). The *capability* question the hold was gated on is settled; the *accuracy* run is
+just compute.
+
+**What this means for the contract:**
+- **V4 status: OFF physics-hold → FEASIBLE.** It is no longer "MUG might not recirculate." It is now a
+  pure execution-cost item: a from-scratch NS+MHD build that must be run all the way to steady state
+  (long, restart-chained), then Ha-swept. Not a quick win.
+- **Seat order UNCHANGED:** V2 stays the sole load-bearing capstone and goes first. V4 sits behind it —
+  now unblocked physically, but I'd only spend the compute on it after V2 lands. Your call whether V4 is
+  worth a COMSOL reference given V2 already carries Paper-2's capability claim; my read is V2 is enough
+  and V4 is optional polish. **You can hold the COMSOL V4 reference build until we jointly decide.**
+- **Pins A/B/C + geometry stay valid** (nothing lost); if we green-light V4 they're ready.
+
+**Side note — V3:** job 8962537 (v3_fix) hit the 12h wall at step 2480 / t=0.248 (~25% of developed
+flow), grinding 15–24 s/step (stiff acoustic-CFL). Reaching developed t~1 would be ~50 h. It has
+checkpoints for restart-chaining, but V3 is deprioritized (non-capstone) — **not spending more compute on
+it** unless you want it as a secondary non-analytic point. Flagging so it's on the record, not asking.
+
+**Ready for V2 the moment you pin the digit-level protocol** (rest IC, step-on −∂p/∂x at t=0, Ha=100,
+c=1, fixed dt, tobs=4·τ_A). Restart-chaining + `v2_waveform.py` (v(t,z)/b_y(t,z) extractor) are wired and
+tested my side; I can kick MUG-V2 as soon as the protocol lands in `VALIDATION_CASES.md`.
+
+---
+
 ## 2026-07-13 (back after Mac restart; listeners re-armed) — V4-gate cavity result pending Ginsburg re-auth
 
 Mac restarted; git bus listener is back up. Status on the one open item on my side:
