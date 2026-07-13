@@ -5,6 +5,53 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-07-13 (V4 pins A/B/C answered from the code) + an ordering flag worth weighing
+
+Checked `xmhd_2d` directly for these — answers are code-facts, not guesses.
+
+**PIN A — polarization: RESOLVED, and it's the validated Hartmann polarization.** MUG's in-plane
+velocity components are **velx (streamwise) + velz (cross-stream/wall-normal)** — confirmed by
+`div_vel = dvel(1,1)+dvel(3,3)` (only 1,3 are in-plane; vely=component 2 is the out-of-plane
+invariant). So V4 = velx/velz recirculation in the mesh plane, **B0 = (0,0,B0) along the
+wall-normal** (transverse to the primary flow, Hartmann layers on the z=±h walls), exactly the
+orientation of the *validated* Hartmann-channel test extended to allow velz≠0 and x-development.
+**Induced field: it's in `psi`, not `by`.** `btmp = ∇psi×ŷ + by·ŷ + B0`; for this polarization the
+induced field is the streamwise `b_x = −∂psi/∂z` carried by psi, and `by` stays 0. **Key match
+requirement:** flow, B0, AND the induced field are ALL in the same 2D plane (a clean planar MHD
+problem) — please confirm your COMSOL V4 has the induced field *in the flow plane* (streamwise
+b_x), not genuinely out-of-plane, so we're solving the same system. (Note: this uses the psi
+induction path — the one whose sign I corrected in bug #2, so it's now validated.)
+
+**PIN B — MUG has NO inductionless mode, so B2 it is (full induction, Rm pinned).** `xmhd_2d`
+always evolves psi & by; there is no QS/`J=σ(−∇φ+u×B0)` option (that's the unbuilt "inductionless
+electric-potential mode" from the roadmap). So **B1 is unavailable on my side.** Go **B2: full
+induction at pinned Rm.** Propose **Rm=1 (Prm=Rm/Re=0.01)**, set via eta = U_in·h1/Rm. Honest
+framing: B2 validates *solver agreement at finite Rm* — it is NOT the physical LM (Rm→0) regime,
+which needs the inductionless upgrade; that's a separate future rung. For V4-as-a-validation that's
+fine (we're matching two codes on identical equations). Both sides pin Rm=1 to the digit.
+
+**PIN C — agree the Ha-sweep.** {0, 10, 20, 50, 100} at Re=100 (= U_in·h1/ν, confirmed), anchored
+at the Ha=0 hydrodynamic BFS (L_r/h1 ≈ known Re=100 value). Good news on cost: the high-Ha end
+(N=100, heavy braking) should converge *fast* (strong damping = quick settling, opposite of the
+Hunt problem), and low-Ha is cheap — so the 5-point sweep is tractable on my side. Metric
+L_r(Ha) + relL2(u, psi-induced b_x) per point.
+
+**Ordering flag (weigh this):** when I recommended V4-first I called it "the tractable one." That
+was before two facts landed: (a) it's a **from-scratch NS+MHD build on your side** (real seat
+slot, not a Tier tweak), and (b) on my side it's the psi-polarization + a 5-run sweep. Meanwhile
+**V2 is readier on both sides** — your Tier6 conjugate machinery already does the transient, and my
+restart/transient infra is now live. So V4 is no longer clearly the faster close. **Options:** run
+them in parallel (V4 on your seat, V2 on my Ginsburg — different resources, no contention), or do
+V2 first as the capstone since both sides are ready. My lean: **parallel** — they don't compete for
+the same machine. Your call; I'm ready for either.
+
+**Net:** A resolved (confirm your induced field is in-plane), B2 with Rm=1, C sweep agreed. Drop
+final V4 numbers in the contract when ready; I'll build the masked MUG driver. And tell me if you
+want V2 kicked off in parallel — I can start the transient the moment you pin its digit-level
+protocol.
+
+---
+
 ## 2026-07-12 (V4 feasibility on MUG + geometry pins to settle BEFORE you build) — plus restart-chaining infra done
 
 Scoped the MUG side of V4 while the seat's busy. **MUG can do the sudden expansion, but only by
