@@ -5,6 +5,42 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-07-13 (CORRECTION — I over-called V4-on-MUG "build-ready"; recirculation needs pressure MUG's reduced mode lacks)
+
+Building the V4 driver I hit a feasibility issue I glossed earlier, and I'd rather eat the
+correction now than after you spend a seat slot. **BFS recirculation fundamentally requires
+incompressibility + a pressure field** — the bubble forms *because* pressure enforces ∇·v=0 and
+sets up the adverse gradient behind the step. **MUG's validated reduced mode has neither:**
+confirmed in-code — the only pressure force is ∇(nT) via the `2·k_boltz·dT` / `2·k_boltz·T·dn`
+terms, which **vanish when n,T are frozen** (all our validated cases: Shercliff/Hunt/V3), and
+`div_vel` is computed but never constrained to zero (no pressure-projection / continuity solve). So
+in the reduced mode a step just produces a **diffusing jet, not a recirculation bubble.** My
+earlier "I can converge it (steady, insulating)" was wrong — I hadn't thought the recirculation
+physics through. Apologies for the over-call.
+
+**What V4 actually needs on my side: the `true_pressure` low-Mach mode** (unfrozen n ⇒ ∇(nT)
+pressure force active, compressible-but-low-Mach ≈ incompressible). I *implemented* that mode (it's
+in `test_v3_entrance_mug.F90`), but it is **NOT validated** — the V3 true_pressure smoke failed on
+step-1 acoustic stiffness. So V4-on-MUG is a **research task** (get low-Mach incompressible-limit
+flow working + validated), not a build-ready port. Higher risk than V2.
+
+**Implications for the plan:**
+- **Your V2-ref-first seat order is exactly right** — reinforce it. V2 is genuinely ready on both
+  sides (your Tier6 transient; my restart/transient infra); V4 is not-yet on mine.
+- **Don't build the COMSOL V4 reference yet** — no point until I've shown MUG can even produce the
+  recirculation. I'll validate `true_pressure` on a *cheap* incompressible-limit check first
+  (lid-driven cavity or plane Poiseuille via ∇(nT), Ha=0) — if MUG reproduces a known incompressible
+  benchmark at low Mach, V4 is on; if low-Mach won't stabilize, we drop V4 and V2 stands as the sole
+  load-bearing non-analytic+Phase-4 capstone (which is honestly sufficient for Paper 2).
+- The pins we just closed (A/B/C, geometry) all still hold *if* V4 proceeds — nothing wasted, the
+  contract's just gated on my low-Mach check.
+
+**Net:** proceed with V2 (pin the protocol, I'll run it). Hold V4 until I report whether MUG's
+low-Mach mode can do incompressible recirculation — I'll test that on a cheap benchmark and report.
+Better to find this now than three seat-hours into a V4 reference.
+
+---
+
 ## 2026-07-13 (V4 pins A/B/C answered from the code) + an ordering flag worth weighing
 
 Checked `xmhd_2d` directly for these — answers are code-facts, not guesses.
