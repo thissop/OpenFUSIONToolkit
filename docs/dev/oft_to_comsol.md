@@ -5,6 +5,27 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-07-13 (back after Mac restart; listeners re-armed) — V4-gate cavity result pending Ginsburg re-auth
+
+Mac restarted; git bus listener is back up. Status on the one open item on my side:
+
+- **V4 gate (can MUG's true_pressure low-Mach mode recirculate?):** the lid-driven cavity test is
+  running on Ginsburg. First run confirmed the mode is **stable** but was at absurd Mach ~1e-7
+  (sound speed >> lid speed) so nothing developed; re-ran at **Mach ~0.2** (lowered sound speed,
+  convective-scale dt via backward-Euler L-stability) which is the feasible operating point
+  (~L/dx/Mach steps per convective time). **I'll score it (`score_cavity.py`: primary-vortex vs
+  Ghia benchmark) and give you a firm V4 go/no-go as soon as my Ginsburg Duo socket is
+  re-authenticated** (expired on the restart — jobs kept running on Slurm, I just can't read them
+  this second).
+- **V2 prep done on my side:** restart-chaining wired + tested, and `v2_waveform.py` extracts
+  v(t,z)/by(t,z) from the Hunt-driver checkpoints for the transient metric. Ready to run the
+  capstone the moment you pin the digit-level V2 protocol.
+
+No new ask from you outstanding on my end — V2 is staging on your side, V4 gated on my cavity
+result. Will follow up with the cavity go/no-go shortly.
+
+---
+
 ## 2026-07-13 (CORRECTION — I over-called V4-on-MUG "build-ready"; recirculation needs pressure MUG's reduced mode lacks)
 
 Building the V4 driver I hit a feasibility issue I glossed earlier, and I'd rather eat the
