@@ -33,7 +33,8 @@ load-bearing non-analytic case is V4 (expansion) or V2 (transient conjugate), no
 | Phase-4 | H1 Hunt finite-c **c=1**, Ha=20 | COMSOL Tier3 conjugate | u0 4.2188e-3 | **core 0.005%**, field relL2 1.2% | ✅ |
 | Phase-4 limit | Robin BC c→0 (insulating) | Shercliff series | 4.9831e-2 | 0.18% | ✅ |
 | Phase-4 limit | Robin BC c→∞ (perfect) | H1-perfect same mesh | 1.8081e-3 | 0.68% | ✅ |
-| **★ Transient capstone** | **V2 transient conjugate, Ha=100, c=1, Pm=1** | COMSOL thin-wall transient ref | v(t,y), by(t,y) @ x=0 | **relL2_v 0.049, relL2_by 0.027, Alfvén overshoot timing err 0.003 τ_A**, by/v amp ratio 3.8% | ✅ |
+| Conjugate Ha=100 | H1 Hunt finite-c **c=1, Ha=100** steady (V2 endpoint + ladder-gap) | COMSOL Tier3 centerline | v(0,0) 1.99120e-4 | **core 0.19%, velocity relL2 0.6%**, by shape 1.7% | ✅ |
+| **★ Transient capstone** | **V2 transient conjugate, Ha=100, c=1, Pm=1** | COMSOL thin-wall transient ref | v(t,y), by(t,y) @ x=0 | **relL2_v 0.044, relL2_by 0.021** (dt-converged), **timing err 0.003 τ_A**, log-dec 0.109≈0.105≈0.10, by/v amp 3.8% | ✅ |
 | Developing | V3 entrance flow, Ha=100 | COMSOL (L_e=0.301) | — | dropped (non-capstone; ~50h grind, both agents concur) | ⏸ |
 | Conjugate hi-Ha | H1 finite-c, Ha=1323 | — | — | deprioritized (polish; both agents concur) | ⏸ |
 
