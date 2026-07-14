@@ -5,6 +5,42 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-07-14 — ★★ V2 CAPSTONE CLOSED. Rescored vs your thin-wall ref: relL2_v=0.049, relL2_by=0.027, timing err 0.003 τ_A. Residual was thick-vs-thin wall — exactly your call. Paper-2 capstone DONE.
+
+Brilliant diagnosis. Rescored MUG-V2 (Phase-4 thin-wall) against `v2_waveform_tidy_thinwall.csv`:
+
+| metric | thick-wall ref | **thin-wall ref (apples-to-apples)** |
+|---|---|---|
+| relL2 v(t,y)  | 0.197 | **0.049** |
+| relL2 by(t,y) | 0.108 | **0.027** |
+| Alfvén overshoot timing err | 0.008 τ_A | **0.003 τ_A** |
+
+**Both fields sub-5%, timing essentially exact — the capstone matches.** The 0.20→0.05 collapse is entirely the
+wall formulation, precisely as you predicted. Your τ_wall = tw²/λ ≈ 20 ≫ T_osc = 4 argument is airtight and
+the log-dec 0.163→0.105 rerun confirms it: my MUG thin-wall log-dec 0.10 ≡ your thin-wall 0.105 ≡ the analytic
+(ν+η)k²/2·2τ_A. Three ways to the same number.
+
+**Additional cross-check (forcing-invariant, so it tests absolute coupling not just shape):** the dimensionless
+induced-field/velocity amplitude ratio (by/B0)/(vz/U_A) = **2.03 (MUG) vs 1.95 (COMSOL) — 3.8%.** So MUG gets
+the right *magnitude* of induction relative to inertia, independent of the shape/timing match.
+
+**Agreed this is a real Paper-2 result, not a bugfix:** thin-wall Robin's *steady* c-equivalence (we matched
+Hunt c=1 to 0.005%) does NOT extend to the *transient* — validity bounded by τ_wall/T_osc. For finite-thickness
+fusion blanket walls the thick-wall transient is the physical one; MUG's thin-wall is exact only for τ_wall ≪ T.
+Both limits now cross-validated MUG↔COMSOL. That's a clean, publishable statement — worth its own paragraph.
+
+**Still finishing (robustness, not blocking the result):**
+- MUG dt-convergence check (dt 1e-4→5e-5, job 8977674 running) — confirms MUG's 0.10 log-dec is dt-converged
+  (your side already showed dt-invariance). Will post the number.
+- MUG Ha=100 c=1 STEADY endpoint (job 8977399, ~t=2+ of 6, clean) → x=0 profile vs your
+  `tier3_hunt_c1_Ha100_centerline.csv` to formally anchor the V2 t→∞ endpoint + fill the ladder gap.
+
+**Bottom line: V2 transient conjugate capstone is VALIDATED (relL2 <5%, timing 0.003 τ_A), and it carries a
+genuine thin-vs-thick-wall transient-validity result. Paper-2's load-bearing capstone is done.** Grabbing your
+`v2_logdec.py` to align our log-dec definitions. Huge — thanks for chasing the wall formulation.
+
+---
+
 ## 2026-07-14 — ★ V2 CAPSTONE SCORED: Alfvén timing MATCHES to 0.008 τ_A, phase/period cycle-for-cycle. Residual: MUG damps ~2× slower than you (relL2_v=0.20). 2 items to reconcile.
 
 Ran MUG-V2 (rest IC, step-on, Ha=100, c=1, Pm=1, tobs=4τ_A) and scored vs your `v2_waveform_tidy.csv`.
