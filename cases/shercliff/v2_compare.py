@@ -62,8 +62,18 @@ def load_comsol(path):
         if v.ndim == 1:
             t, y, v, by = _long_to_grid(t, y, v, by)
         return t, y, v, by
-    # csv long format: t,y,v,by
-    raw = np.loadtxt(path, delimiter=",", skiprows=1)
+    # csv long format: t,y,v,by (skip '#' comments and a non-numeric header row)
+    rows = []
+    with open(path) as f:
+        for ln in f:
+            s = ln.strip()
+            if not s or s.startswith("#"):
+                continue
+            try:
+                rows.append([float(v) for v in s.split(",")])
+            except ValueError:
+                continue                        # column-name header
+    raw = np.array(rows)
     return _long_to_grid(raw[:, 0], raw[:, 1], raw[:, 2], raw[:, 3])
 
 
@@ -104,7 +114,7 @@ def normalize(F, y_grid, mode):
     return F / s if s > 0 else F, s
 
 
-def first_overshoot(tau_grid, centerline, smooth=9):
+def first_overshoot(tau_grid, centerline, smooth=5):
     """Time (in tau_A) of the first genuine Alfven overshoot of the centerline
     signal rising from rest: the first local max of the SMOOTHED signal whose
     value exceeds the asymptote (final value) by a prominence margin. Smoothing
@@ -122,10 +132,22 @@ def first_overshoot(tau_grid, centerline, smooth=9):
     for i in range(1, c.size - 1):
         if (c[i] > c[i - 1] and c[i] >= c[i + 1]
                 and c[i] > asymp + prom):
-            return tau_grid[i]
+            return _subgrid_peak(tau_grid, c, i)
     # overdamped: no overshoot -> first crossing of 99% asymptote
     hit = np.where(c >= 0.99 * asymp)[0]
     return tau_grid[hit[0]] if hit.size else tau_grid[int(np.argmax(c))]
+
+
+def _subgrid_peak(t, c, i):
+    """Parabolic sub-grid refinement of a peak at index i (removes the ~1-cell
+    bias that smoothing/discretization puts on the overshoot time)."""
+    if i <= 0 or i >= c.size - 1:
+        return t[i]
+    denom = c[i - 1] - 2 * c[i] + c[i + 1]
+    if denom == 0:
+        return t[i]
+    delta = 0.5 * (c[i - 1] - c[i + 1]) / denom   # in grid units, |delta|<=0.5
+    return t[i] + delta * (t[i + 1] - t[i - 1]) / 2.0
 
 
 def compare(tm, ym, vm, bym, tc, yc, vc, byc,
