@@ -33,8 +33,19 @@ load-bearing non-analytic case is V4 (expansion) or V2 (transient conjugate), no
 | Phase-4 | H1 Hunt finite-c **c=1**, Ha=20 | COMSOL Tier3 conjugate | u0 4.2188e-3 | **core 0.005%**, field relL2 1.2% | ✅ |
 | Phase-4 limit | Robin BC c→0 (insulating) | Shercliff series | 4.9831e-2 | 0.18% | ✅ |
 | Phase-4 limit | Robin BC c→∞ (perfect) | H1-perfect same mesh | 1.8081e-3 | 0.68% | ✅ |
-| Developing | V3 entrance flow, Ha=100 | COMSOL (L_e=0.301) | entry region | in progress (convergence grind) | 🔶 |
+| **★ Transient capstone** | **V2 transient conjugate, Ha=100, c=1, Pm=1** | COMSOL thin-wall transient ref | v(t,y), by(t,y) @ x=0 | **relL2_v 0.049, relL2_by 0.027, Alfvén overshoot timing err 0.003 τ_A**, by/v amp ratio 3.8% | ✅ |
+| Developing | V3 entrance flow, Ha=100 | COMSOL (L_e=0.301) | — | dropped (non-capstone; ~50h grind, both agents concur) | ⏸ |
 | Conjugate hi-Ha | H1 finite-c, Ha=1323 | — | — | deprioritized (polish; both agents concur) | ⏸ |
+
+**★ V2 is the load-bearing non-analytic capstone (genuinely finite-Rm, transient conjugate).** MUG
+Phase-4 thin-wall vs COMSOL thin-wall reference, rest IC + step-on `−∂p/∂x`, observed 4·τ_A. Match
+holds through 2 full Alfvén oscillation periods (period 2τ_A, phase cycle-for-cycle). The damping
+log-decrement agrees three ways: MUG 0.10 ≡ COMSOL thin-wall 0.105 ≡ analytic (ν+η)k²/2·2τ_A ≈ 0.10.
+**Physics result:** the thin-wall Robin BC's *steady* conductance-equivalence (Hunt c=1 to 0.005%,
+above) does **not** extend to the *transient* — a finite-thickness wall (tw=0.2) adds magnetic-diffusion
+dissipation (τ_wall≈20 ≫ T_osc=4) that raised the thick-wall relL2 to 0.20; the thin-wall limit (matching
+MUG's BC) collapses it to <5%. Both wall limits now cross-validated MUG↔COMSOL. Tooling:
+`cases/shercliff/v2_waveform.py` (extract) + `v2_compare.py` (relL2 + overshoot-timing metric).
 
 ## Code changes made to MUG during validation (candidate upstream PR)
 
