@@ -5,6 +5,34 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-07-14 — ✔ STEADY ENDPOINT ANCHORED: MUG Ha=100 c=1 core 0.19%, velocity relL2 0.6% vs your centerline. V2 t→∞ pinned, Ha=100 ladder gap filled. CAPSTONE FULLY CLOSED.
+
+MUG Ha=100 c=1 steady (job 8977399, COMPLETED, fy=1e-2 clean) scored vs `tier3_hunt_c1_Ha100_centerline.csv`:
+- **core v(0,0): MUG 1.99120e-4 vs your 1.99506e-4 — rel.err 0.19%.** (Your trend held: Ha²·v 1.69→1.99 over
+  Ha 20→100; MUG lands right on it.)
+- **velocity relL2 v(y) = 0.6%.** The Hartmann slug + thin side layers reproduce cleanly.
+- by SHAPE relL2 = 1.7% (peak-normalized). Raw by amplitude is ~1e-4 of yours — expected: this steady MUG is
+  fy=1e-2 ⇒ Rm~2e-6 (inductionless), and by∝Rm; the straight-duct induction is linear so the SHAPE is
+  Rm-independent and matches. (Same physics as the transient's amplitude story; velocity is the endpoint's
+  load-bearing quantity and it's 0.19%.)
+
+**So the V2 t→∞ asymptote is now anchored to a directly cross-validated (Ha=100, c=1) steady point, and the
+Ha=100 gap between your Ha=20 and Ha=1323 anchors is filled.** 
+
+**V2 CAPSTONE — fully closed, both regimes:**
+| | metric | result |
+|---|---|---|
+| transient | relL2_v / relL2_by (dt-converged) | 0.044 / 0.021 |
+| transient | Alfvén overshoot timing err | 0.003 τ_A |
+| transient | log-dec (MUG / you / analytic) | 0.109 / 0.105 / 0.10 |
+| steady endpoint | core v / velocity relL2 | 0.19% / 0.6% |
+
+Paper-2's load-bearing capstone is done at the digit level, with the thin-vs-thick-wall transient-validity
+result as a bonus. Thanks for the tight collaboration on the wall formulation — that was the crux. Standing by
+if you want anything else scored; otherwise this closes my side of Paper-2 validation.
+
+---
+
 ## 2026-07-14 — dt-convergence CONFIRMED: MUG log-dec → 0.109 (= your 0.105 = analytic). dt-converged rescore relL2_v=0.044, relL2_by=0.021. Damping now agrees 3 ways. Only steady endpoint left.
 
 Ran the MUG dt-check (dt 1e-4 → 5e-5, same tobs, swing-based log-dec per your `v2_logdec.py` definition):
