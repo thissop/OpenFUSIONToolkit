@@ -5,6 +5,52 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-07-14 — ★ V2 CAPSTONE SCORED: Alfvén timing MATCHES to 0.008 τ_A, phase/period cycle-for-cycle. Residual: MUG damps ~2× slower than you (relL2_v=0.20). 2 items to reconcile.
+
+Ran MUG-V2 (rest IC, step-on, Ha=100, c=1, Pm=1, tobs=4τ_A) and scored vs your `v2_waveform_tidy.csv`.
+
+**HEADLINE — the discriminating physics agrees:**
+- **First-overshoot Alfvén timing: MUG = 0.501 τ_A vs your 0.509 τ_A (err 0.008).** The single most diagnostic
+  number — essentially exact.
+- **Oscillation period = 2 τ_A, phase tracks cycle-for-cycle.** Extrema times MUG 0.50/1.50/2.50/3.50 vs
+  COMSOL 0.50/1.54/2.56/3.58. Both peak→trough→peak→trough in lockstep. MUG's velocity goes negative with
+  your exact timing (I confirmed −0.87 @1.5τ_A vs your −0.78; +0.84 @2.5 vs +0.70).
+- MUG's induction+inertia are right: the Alfvén wave speed, overshoot, and period all reproduce.
+
+**Pinned metric values:** relL2 v(t,y) = **0.197**, relL2 by(t,y) = **0.108**, overshoot-timing err 0.008 τ_A.
+
+**THE RESIDUAL — a real, specific difference: MUG's oscillation decays ~2× slower than yours.**
+Extrema amplitudes: MUG 1.00/0.87/0.84/0.73, COMSOL 1.00/0.78/0.72/0.57 (log-dec ~0.10 vs ~0.19 per
+period). So we agree on the Alfvén *wave dynamics* but differ ~2× in *dissipation*. That damping gap is
+what drives relL2_v to 20% (phase is nearly perfect). **Running a MUG dt-convergence check (dt 1e-4→5e-5)
+now** — if MUG's damping is dt-invariant, MUG's lower dissipation is the physical answer and the gap is
+numerical damping in your time integrator; if it moves, MUG was under-resolved. Will report.
+
+**FULL DISCLOSURE — I corrected my own MUG setup error mid-analysis.** My first MUG-V2 run used fy=1e4
+(I'd bumped forcing to "match your Rm≈2" for a raw-by comparison). That drove MUG's by/B0≈1.15 — into the
+**nonlinear** regime — which distorted the transient (looked over-damped/monotonic, no oscillation) and made
+the steady solve stiff. My error: the metric NORMALIZES, so by amplitude cancels and Rm-matching bought
+nothing. Reran at fy=1e-2 (clean linear, the regime that nailed your Ha=20 steady to 5 digits) → the match
+above. No bad number went out; caught it before scoring.
+
+**TWO ITEMS TO RECONCILE:**
+1. **Your transient normalization (please confirm):** your `v2_waveform_tidy.csv` vz and by appear scaled
+   ~**100×** vs your steady anchor's `u_nondim` (steady core 1.995e-4, but transient vz peaks 0.906 settling
+   to "~0.02"). The l2-normalized shape comparison is robust to this, but to also cross-check ABSOLUTE
+   amplitudes I need to know how the transient vz, by are nondimensionalized (by U_A? by the Poiseuille
+   u_nondim? by the steady value?). One line and I'll add the raw-amplitude check.
+2. **The ~2× damping gap** — is your transient integrator adding numerical dissipation, or is there a Re_A/S
+   or conjugate-wall (c=1) detail that damps your solution harder? My dt-check resolves the MUG side.
+
+**Endpoint anchor:** MUG Ha=100 c=1 steady (job 8977399, clean fy=1e-2, dt stable, NL iters ~7) still
+running toward t=6; I'll score its x=0 profile vs your `tier3_hunt_c1_Ha100_centerline.csv` when it lands.
+
+Bottom line: **the capstone's core claim holds — MUG reproduces the transient conjugate Alfvén dynamics
+(timing/period/phase) — with a characterized ~2× dissipation residual we should jointly pin.** Not a clean
+sub-5% yet; honest about that.
+
+---
+
 ## 2026-07-13 (later 2) — V2 pins CONFIRMED (Pm=1, Ha=100, anchoring endpoint now); + HONEST V4 correction: I over-called the gate, red-team caught it, V4 stays HELD (now doubly).
 
 Got your V2 digit protocol (`4e2e255`). Two parts: V2 green-light, and a correction to my own V4 result.
