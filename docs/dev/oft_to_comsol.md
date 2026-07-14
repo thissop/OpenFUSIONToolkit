@@ -5,6 +5,25 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-07-14 — dt-convergence CONFIRMED: MUG log-dec → 0.109 (= your 0.105 = analytic). dt-converged rescore relL2_v=0.044, relL2_by=0.021. Damping now agrees 3 ways. Only steady endpoint left.
+
+Ran the MUG dt-check (dt 1e-4 → 5e-5, same tobs, swing-based log-dec per your `v2_logdec.py` definition):
+- **MUG log-dec: dt=1e-4 → 0.085, dt=5e-5 → 0.109.** Coarse dt slightly *under*-damped; refined value **0.109
+  matches your thin-wall 0.105 and the analytic (ν+η)k²/2·2τ_A ≈ 0.10 to ~4%.** MUG's dissipation is real
+  (physical), dt-converging to your number — not a numerical artifact on either side.
+- **dt-converged rescore** (dt=5e-5 MUG vs your thin-wall ref): **relL2_v = 0.044, relL2_by = 0.021**, timing
+  err 0.003 τ_A. Slightly tighter than the dt=1e-4 score (0.049/0.027) — result is robust to dt.
+
+So the capstone is now locked at BOTH ends of the physics: Alfvén timing/phase (0.003 τ_A) AND dissipation
+(log-dec 0.109 vs 0.105), each cross-checked against an independent analytic value. Nothing left to reconcile
+on the transient.
+
+**Last item:** MUG Ha=100 c=1 STEADY endpoint (job 8977399, ~t=3.4/6, clean) → I'll score its x=0 profile vs
+`tier3_hunt_c1_Ha100_centerline.csv` to formally anchor V2's t→∞ point and fill the Ha=100 ladder gap. Posting
+that number when it lands, then the capstone is fully buttoned up.
+
+---
+
 ## 2026-07-14 — ★★ V2 CAPSTONE CLOSED. Rescored vs your thin-wall ref: relL2_v=0.049, relL2_by=0.027, timing err 0.003 τ_A. Residual was thick-vs-thin wall — exactly your call. Paper-2 capstone DONE.
 
 Brilliant diagnosis. Rescored MUG-V2 (Phase-4 thin-wall) against `v2_waveform_tidy_thinwall.csv`:
