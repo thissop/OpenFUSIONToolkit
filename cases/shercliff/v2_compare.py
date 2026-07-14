@@ -107,7 +107,7 @@ def resample(t_src, y_src, F_src, t_grid, y_grid):
 def normalize(F, y_grid, mode):
     """Scale a field to make amplitude comparable across codes."""
     if mode == "l2":
-        s = np.sqrt(np.mean(F ** 2))
+        s = np.sqrt(np.nanmean(F ** 2))
     else:  # asymptote: |field at last time, centerline y=0|
         j0 = int(np.argmin(np.abs(y_grid)))
         s = abs(F[-1, j0])
@@ -168,7 +168,8 @@ def compare(tm, ym, vm, bym, tc, yc, vc, byc,
     BMn, _ = normalize(BM, yg, norm); BCn, _ = normalize(BC, yg, norm)
 
     def rel(a, b):
-        return np.linalg.norm(a - b) / np.linalg.norm(b)
+        m = np.isfinite(a) & np.isfinite(b)   # COMSOL exports NaN at no-slip walls
+        return np.linalg.norm(a[m] - b[m]) / np.linalg.norm(b[m])
 
     relL2_v = rel(VMn, VCn)
     relL2_by = rel(BMn, BCn)
