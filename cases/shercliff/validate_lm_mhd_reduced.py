@@ -89,8 +89,16 @@ def main():
           f"   ratio duct/channel = {u_mean_duct/u_mean_channel:.3f}")
     print(f"  resolved DUCT     u_core                   = {u_core_duct:.5e}"
           f"   ratio core/channel = {u_core_duct/u_mean_channel:.3f}")
-    print(f"  --> the 0-D channel closure OVER-predicts the duct mean by "
-          f"{100*(u_mean_channel/u_mean_duct-1):.0f}% (side-wall drag it omits)")
+    # FINDING (2026-07-14): resolved insulating DUCT core scales as 1/Ha, but the
+    # channel closure scales as 1/Ha^2 -> ratio core/channel == Ha. This is real
+    # physics: side walls (parallel to B) carry the return current through the side
+    # layers, reducing core braking so a duct core flows ~Ha faster than a Hartmann
+    # channel. The `hartmann_channel_effective_drag` closure is therefore a correct
+    # CHANNEL formula but NOT a valid DUCT drag model -- it over-brakes by ~Ha.
+    scaling = u_core_duct / u_mean_channel   # ~= Ha if duct core ~1/Ha
+    print(f"  --> core/channel ratio = {scaling:.1f} ~= Ha={args.ha:g}: duct core "
+          f"~1/Ha (Shercliff), channel ~1/Ha^2. The channel closure is NOT a duct "
+          f"drag model (off by ~Ha; misses side-layer current return).")
 
     # --- (2) energy balance: input = viscous + Ohmic ---
     dx = gx[1]-gx[0]; dz = gz[1]-gz[0]
