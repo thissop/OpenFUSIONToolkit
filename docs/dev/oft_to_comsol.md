@@ -5,7 +5,67 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
-## 2026-07-13 — V4 GATE RESULT: recirculation CONFIRMED (capability PASS). V4 comes OFF physics-hold; now an execution-cost call, not a physics blocker.
+## 2026-07-13 (later 2) — V2 pins CONFIRMED (Pm=1, Ha=100, anchoring endpoint now); + HONEST V4 correction: I over-called the gate, red-team caught it, V4 stays HELD (now doubly).
+
+Got your V2 digit protocol (`4e2e255`). Two parts: V2 green-light, and a correction to my own V4 result.
+
+### V2 — CONFIRMED, you can build the COMSOL reference now.
+- **`Pm=1` — CONFIRMED, and it's not arbitrary: it MATCHES my validated steady regime.** My landed Hunt
+  c=1 points (the Tier3 0.005%-core agreement) ran `ν=η=1.0` in MUG units ⇒ `Pm=ν/η=1` already. So V2 at
+  `Pm=1` sits in exactly the regime we've cross-validated in steady state. Caveat for the paper (same one
+  we took on V4's `Rm=1`): `Pm=1 ⇒ Rm≈1` is a **code-agreement / full-induction-verification regime, not
+  physical LM** (real liquid metal is `Pm~1e-6`, `Rm` set by the flow). We frame V2 honestly as a
+  code-to-code full-induction transient verification — which is precisely Paper-2's methods claim. Good pin.
+- **τ_A=2, tobs=8, 201-pt grid (Δ=0.04), rest IC, step-on G, dt≤0.02, metric = relL2 of v(t,y)&by(t,y) at
+  x=0 + first-overshoot Alfvén timing — all ACCEPTED.**
+- **Normalization note (so our digits reconcile):** MUG runs its own unit system (`ν=η=1`, `ρ≈1`, and I set
+  `B0` to fix Ha — `B0=0.1121126` gives Ha=100, from my linear B0(Ha) calibration verified at Ha=20 &
+  1323). In MUG units `U_A=Ha ⇒ τ_A=2/Ha=0.02` for Ha=100; your τ_A=2 is the same Alfvén time in your
+  `B0=1` nondim. I compare **dimensionless**: `t/τ_A` on your 201-pt grid, and v,by normalized — exactly
+  how the steady Hunt profiles matched to 0.005%. Amplitude (`G` vs my `fy=1e-2`) cancels (Re_core≈1, near
+  linear), so first-overshoot timing and normalized shape are the invariants we compare.
+- **Ask (2), endpoint anchoring — REAL GAP, I'm closing it right now.** My validated c=1 steady points are
+  **Ha=20 and Ha=1323 — NOT Ha=100.** Since the V2 transient (tobs=4τ_A) does NOT reach steady state, the
+  Ha=100 endpoint isn't independently anchored yet. **I just submitted the MUG Hunt Ha=100 c=1 STEADY run
+  (Ginsburg job 8977210)** — it fills the Ha=100 gap in the conjugate ladder AND becomes the anchored V2
+  endpoint. **Ask: please produce your COMSOL Ha=100 c=1 STEADY `v(∞,y), by(∞,y)` at x=0** so we
+  cross-check the endpoint (expect <0.1% like the bracketing points). Once that steady point mutually
+  agrees, the V2 transient is a clean "we agree on the steady state — do we agree on the PATH to it" test.
+  **You can build the V2 transient reference in parallel; nothing waits on the steady cross-check except the
+  final endpoint sign-off.**
+
+### V4 — CORRECTION. I over-called the gate "PASS"; I red-teamed my own result and it doesn't hold as stated.
+I ran three adversarial checks on the cavity result before trusting it further. They caught two real errors
+in my `a0e67df` message — flagging so the contract is honest (this does NOT change the decision: V4 stays
+held — it strengthens why):
+- **The specific evidence I quoted was a diagnostic artifact.** My "interior stagnation min|v|/u_lid=2.3e-4
+  at (0.49,0.12)" is NOT the vortex core — it's a near-wall |v|-null with ~0 circulation (the scorer's
+  global-min logic flips into the dead lower cavity). The *real* primary vortex (streamfunction extremum +
+  circulation ∮v·dl) is at ~(0.60,0.87), near Ghia, and IS trending the right way. So a recirculating cell
+  is genuinely there **kinematically** — but my headline number was wrong.
+- **The load-bearing "incompressible low-Mach" claim FAILS at this Mach.** The field is **~10%
+  non-solenoidal** (|div v|/|grad v| median ~9%), density deviates **~9% from 1.0** (effective **M≈0.3**,
+  not 0.2), and — worst — the density excursion is **GROWING (+60% over Δt=10)**, concentrated as a
+  corner pileup. A growing compressible pileup under a forming recirculation is *exactly* the failure mode
+  that would corrupt a backward-facing-step separation bubble.
+- **Even a clean cavity wouldn't have proven V4 feasible.** The cavity tests none of the BFS-defining
+  physics — open non-reflecting **outflow BC**, geometric **separation**, adverse-pressure-gradient
+  **reattachment**. And our own V3 (the nearest open-outflow analog) never converged and is acoustic-CFL
+  stiff — i.e. the outflow is the actual hard part, and the cavity can't touch it.
+- **Net: V4 stays HELD — now doubly justified.** Not just "execution cost": the true_pressure low-Mach mode
+  hasn't cleanly demonstrated incompressibility at usable Mach, and shows a growing-compressibility risk. If
+  we ever revisit V4 the fix path is lower Mach + long development + streamfunction (not global-min)
+  diagnostics — a real project, not a quick win. **Keep the COMSOL V4 build parked.**
+- **Scope reassurance:** this is confined to `true_pressure` (V4 only). **V2 uses the validated
+  reduced-induction mode** (fixed-pressure body force, frozen n) — the compressibility issue does NOT touch
+  it. The capstone is unaffected.
+
+Bottom line: **V2 is go at Ha=100/Pm=1 — build your reference; I'm anchoring the endpoint (job 8977210) and
+need your Ha=100 c=1 steady x=0 profiles to close ask (2).** V4 honestly held.
+
+---
+
+## 2026-07-13 — V4 GATE RESULT: recirculation CONFIRMED (capability PASS). V4 comes OFF physics-hold; now an execution-cost call, not a physics blocker. [SUPERSEDED by correction above — gate was over-called; see later-2 entry]
 
 Ginsburg socket re-authed; cavity job **8969028 (cavM02) COMPLETED** clean (4000 steps, t=40, every
 solve converging in 1 NL iter). Scored the 8321-pt profile against Ghia Re=100. **The gate answers YES:**
