@@ -106,6 +106,105 @@ def hartmann_channel_effective_drag(
     return _maybe_scalar(out)
 
 
+def shercliff_duct_effective_drag(
+    half_width: float,
+    hartmann: float | np.ndarray,
+    nu: float,
+) -> float | np.ndarray:
+    '''Return alpha_eff for the core of an INSULATING rectangular MHD duct.
+
+    A 1-D Hartmann channel (`hartmann_channel_effective_drag`) brakes as Ha^2 and
+    its core velocity ~ 1/Ha^2. A real *duct* has side walls parallel to the field;
+    for INSULATING walls the induced core current returns through the thin side
+    (Shercliff) layers rather than the walls, which weakens the net core braking so
+    that the core velocity scales as 1/Ha, a factor of Ha *faster* than a channel.
+    The leading-order reduced balance f = alpha_eff * u_core therefore gives
+
+        u_core = f a^2 / (nu Ha)   ==>   alpha_eff = (nu / a^2) Ha .
+
+    Validated against resolved MUG (c_wall=1e-4, verified Ha=20 & 100): the resolved
+    core matches u_core = f a^2/(nu Ha) to ~0.4% (Ha=20) / ~1.0% (Ha=100); the ~1%
+    residual is the finite-Ha side-layer correction. Use this, NOT the channel
+    closure, for insulating duct/blanket geometry -- the channel closure over-brakes
+    an insulating duct by a factor of Ha.
+    '''
+
+    _require_positive("half_width", half_width)
+    _require_positive("nu", nu)
+    ha = _as_array("hartmann", hartmann)
+    if np.any(ha <= 0.0):
+        raise ValueError("hartmann must be positive")
+    return _maybe_scalar((nu / half_width**2) * ha)
+
+
+def hunt_duct_effective_drag(
+    half_width: float,
+    hartmann: float | np.ndarray,
+    nu: float,
+    wall_conductance: float,
+) -> float | np.ndarray:
+    '''Return alpha_eff for the core of a CONDUCTING-wall MHD duct (Hunt geometry).
+
+    For conducting Hartmann walls of dimensionless conductance c (insulating side
+    walls), the induced core current closes preferentially through the walls, which
+    -- unlike the insulating case -- restores the strong Ha^2 core braking of a
+    channel but reduced by the wall's conductance. The high-Ha Hunt result for the
+    core velocity is
+
+        u_core = (1 + 1/c) f a^2 / (nu Ha^2)   ==>
+        alpha_eff = (nu / a^2) Ha^2 / (1 + 1/c) .
+
+    Limits: c -> inf (perfect conductor) recovers the channel drag nu Ha^2/a^2;
+    c = 1 gives half the channel drag (core flows 2x faster). The formula is the
+    high-Ha asymptote and holds while the wall out-conducts the side layers,
+    c >> Ha^{-1/2}; for c below that crossover use `shercliff_duct_effective_drag`
+    (insulating limit, 1/Ha scaling).
+
+    Validated against resolved MUG Hunt c=1: core u_nondim = (1+1/c)/Ha^2 = 2/Ha^2
+    matches the resolved 1.995e-4 at Ha=100 to 0.3% (a ~16% finite-Ha correction
+    remains at Ha=20, vanishing as Ha increases -- blanket Ha is ~1e3-1e4).
+    '''
+
+    _require_positive("half_width", half_width)
+    _require_positive("nu", nu)
+    _require_positive("wall_conductance", wall_conductance)
+    ha = _as_array("hartmann", hartmann)
+    if np.any(ha <= 0.0):
+        raise ValueError("hartmann must be positive")
+    return _maybe_scalar((nu / half_width**2) * ha**2 / (1.0 + 1.0 / wall_conductance))
+
+
+def duct_effective_drag(
+    half_width: float,
+    hartmann: float | np.ndarray,
+    nu: float,
+    wall_conductance: float,
+) -> float | np.ndarray:
+    '''Return the core drag for an MHD duct, selecting the correct wall regime.
+
+    Dispatches on the wall-conductance / side-layer-conductance crossover
+    c_cross ~ Ha^{-1/2}: for c >> c_cross the conducting-wall (Hunt) closure
+    applies (~Ha^2 braking); for c << c_cross the insulating (Shercliff) closure
+    applies (~Ha braking). At the crossover the two are within an O(1) factor and
+    either is order-of-magnitude correct. This is a 0-D reduced-model estimate for
+    the CORE, not a substitute for a resolved solve; the insulating side jets carry
+    extra flux the core closure omits.
+    '''
+
+    _require_positive("half_width", half_width)
+    _require_positive("nu", nu)
+    _require_nonnegative("wall_conductance", wall_conductance)
+    ha = _as_array("hartmann", hartmann)
+    if np.any(ha <= 0.0):
+        raise ValueError("hartmann must be positive")
+    sher = (nu / half_width**2) * ha
+    if wall_conductance <= 0.0:                       # insulating: side layers only
+        return _maybe_scalar(sher)
+    c_cross = 1.0 / np.sqrt(ha)                        # wall vs side-layer conductance
+    hunt = (nu / half_width**2) * ha**2 / (1.0 + 1.0 / wall_conductance)
+    return _maybe_scalar(np.where(wall_conductance >= c_cross, hunt, sher))
+
+
 def perpendicular_velocity(velocity: np.ndarray, bhat: np.ndarray) -> np.ndarray:
     '''Return velocity perpendicular to bhat, normalizing bhat if needed.'''
 

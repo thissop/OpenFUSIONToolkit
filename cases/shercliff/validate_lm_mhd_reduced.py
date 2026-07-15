@@ -67,6 +67,7 @@ def main():
     ap.add_argument("--nu", type=float, default=1.0)
     ap.add_argument("--eta", type=float, default=1.0)
     ap.add_argument("--a", type=float, default=1.0)
+    ap.add_argument("--c", type=float, default=1e-4, help="wall conductance of the resolved case")
     args = ap.parse_args()
 
     x, z, vely, by = load_profile(args.profile)
@@ -99,6 +100,19 @@ def main():
     print(f"  --> core/channel ratio = {scaling:.1f} ~= Ha={args.ha:g}: duct core "
           f"~1/Ha (Shercliff), channel ~1/Ha^2. The channel closure is NOT a duct "
           f"drag model (off by ~Ha; misses side-layer current return).")
+
+    # --- (1b) FIXED duct closure (gap-4 fix): correct wall-regime drag ---
+    a2 = args.a ** 2
+    if args.c < 1.0 / np.sqrt(args.ha):      # insulating regime
+        alpha_duct = closures.shercliff_duct_effective_drag(args.a, args.ha, args.nu)
+        which = f"shercliff (insulating, c={args.c:g})"
+    else:
+        alpha_duct = closures.hunt_duct_effective_drag(args.a, args.ha, args.nu, args.c)
+        which = f"hunt (conducting, c={args.c:g})"
+    u_core_duct_pred = (args.fy / alpha_duct) * args.nu / (args.fy * a2)
+    und_resolved = u_core_duct * args.nu / (args.fy * a2)   # resolved core u_nondim
+    print(f"  FIXED duct closure [{which}]: predicted core u_nondim={u_core_duct_pred:.4e}"
+          f"  vs resolved {und_resolved:.4e}  err={100*abs(u_core_duct_pred-und_resolved)/und_resolved:.2f}%")
 
     # --- (2) energy balance: input = viscous + Ohmic ---
     dx = gx[1]-gx[0]; dz = gz[1]-gz[0]
