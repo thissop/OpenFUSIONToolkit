@@ -168,6 +168,40 @@ separate from the electromagnetic loop and does not need the plasma solver in th
 
 ---
 
+## 6a. Novelty of the Stage-3 target (plasma + solid + liquid-metal, self-consistent, transient)
+
+Assessed against the current literature, honestly:
+
+- **The liquid-metal *fluid* response to disruption-rate field changes is an active research
+  frontier, not unprecedented.** A handful of 2025–2026 works (arXiv:2502.02699,
+  arXiv:2606.25167; the SciDAC-5 plasma–LM effort; Maxwell–Navier–Stokes liquid-wall
+  modeling arXiv:2411.11865) treat the LM as a *fluid* with disruption-driven eddy currents,
+  Lorentz forces (`~10⁷–10⁸ N/m³`, accelerations `10³–10⁴ m/s²`) and flow response. So MUG
+  doing transient LM-MHD is **timely and competitive**, not first-of-kind.
+- **But that existing work almost universally *prescribes the field one-way*** — a disruption
+  scenario supplies an imposed, time-varying field, and the LM responds to it. The field is
+  an input, not a self-consistent participant.
+- **The genuine novelty is closing the loop: a self-consistent, three-way
+  plasma-equilibrium ↔ solid-structure-eddy-current ↔ liquid-metal-*fluid* coupling** — where
+  the moving liquid metal's own currents feed back into the field seen by the plasma and the
+  structure — in a single integrated open-source toolkit. The pieces exist *separately*
+  (TokaMaker↔ThinCurr is the plasma↔solid loop; MUG is the validated fluid); **no one appears
+  to have closed the full three-way loop with the blanket as a live fluid rather than a
+  static conductor.** That integration is the contribution.
+- **MUG walks in with the load-bearing physics already validated.** The literature identifies
+  *standing Alfvén waves* as the key mechanism controlling the LM disruption response — and
+  the conjugate (conducting-wall) coupling sets its damping. That is exactly the physics our
+  V2 capstone validated to a few percent (transient Alfvén overshoot/timing, `Pm=1`
+  full-induction, thin-wall Robin BC, with the wall-diffusion-time caveat). So MUG is
+  arguably the **best-validated tool for the specific physics that governs this regime** — a
+  strong, defensible position for the Stage-3 paper.
+
+**Verdict:** Stage 3 is a genuine, publishable research contribution. Its novelty is
+concentrated in the *self-consistent integration* (plasma + solid + fluid, closed loop),
+which is unclaimed, rather than in the fluid-response physics alone (which is contested
+frontier). Reaching it through Stages 1–2 is the right way to earn it — each stage is
+independently useful and de-risks the next.
+
 ## 7. Recommendation and the decisions that gate it
 
 **Recommendation: build Stage 1 first and treat it as the deliverable milestone.** It is the
@@ -180,8 +214,13 @@ research contribution in its own right and should be scoped separately once 1–
 1. **Geometry:** axisymmetric R–Z blanket sector (matches TokaMaker/ThinCurr) vs. a
    Cartesian duct module. The loop wants R–Z; MUG supports it but our validated cases are
    Cartesian — so the first task is an R–Z MUG blanket verification against a known case.
-2. **Field ingestion:** does MUG accept a spatially-varying `B₀(R,Z)` field today, or only a
-   uniform `B_0`? (The duct ladder uses uniform.) This is the concrete first code change.
+2. **Field ingestion — CONFIRMED, this is the first code change.** MUG's `B_0` is today a
+   *constant static 3-vector* (`xmhd_2d.F90:91, REAL(r8) :: B_0(3)=0`), read once per cell
+   (`B_0 = self%parent_sim%B_0`) and used in the flux and stretch terms. Stage 1 needs it
+   promoted to a **spatial field `B₀(x,z)`** sampled at the integration points; Stage 3 needs
+   it **time-varying `B₀(x,z,t)`**. This is a well-scoped, localized change (the sites that
+   read `B_0` are the residual/Jacobian flux and stretch blocks — lines ~602/683, 801/886,
+   1046, 1170/1256, 1544/1586) and is the concrete task-one for the whole build.
 3. **Steady vs transient target first:** Stage 1 is steady (inductionless-equivalent, but
    MUG runs full induction at low `Rm` — we proved it is stable there). Confirm we want the
    steady milestone before the transient one.
