@@ -273,6 +273,95 @@ thin-wall model is exact only for $\tau_{\rm wall}\ll T_{\rm osc}$. Both limits 
 now cross-validated between MUG and COMSOL.
 
 %==============================================================================
+\section{Validation at the liquid-metal parameter point and reduced-model closures}
+\label{sec:lmpoint}
+%==============================================================================
+The capstone and ladder above operate at $\Pm=1$, where the induced field and
+velocity share a single diffusive scale and the code cross-validation is
+cleanest. Real liquid metals, however, sit at $\Pm\sim10^{-6}$: the viscous and
+magnetic diffusivities differ by six orders of magnitude. This section validates
+MUG at that physical parameter point, supplies the reduced-model wall-drag
+closures appropriate to real duct geometry, and confirms the plasma-blanket
+coupling formulas against exact references.
+
+\subsection{Low-\texorpdfstring{$\Pm$}{Pm} validation}
+\label{sec:lowpm}
+We hold $\Ha=100$ and $c=1$ (the conjugate duct of the capstone) fixed and sweep
+$\Pm=1,10^{-2},10^{-4},10^{-6}$ across six decades. Because
+$\Ha=B_0 a\sqrt{\sigma/(\rho\nu)}$ depends on $\nu\eta$ only through the fixed
+combination, we hold $\nu\eta$ constant by setting $\nu=\sqrt{\Pm}$ and
+$\eta=1/\sqrt{\Pm}$; each of $\nu$ and $\eta$ therefore swings by $10^{3}$ across
+the sweep while $\Ha$ stays pinned at $100$. The discriminating physics is that the
+steady core velocity, nondimensionalized as $u=v_y\nu/(G a^2)$, \emph{must} be
+$\Pm$-independent: $\Pm$ sets the amplitude of the induced field but not the flow.
+
+MUG honors this exactly. The nondimensional core velocity is flat at
+$u=1.99\times10^{-4}$ to within $0.17\%$ across all six decades of $\Pm$
+(Fig.~\ref{fig:pmsweep}), and matches the independently validated $\Ha=100$,
+$c=1$ value ($1.995\times10^{-4}$) to $0.26\%$ --- while $\nu$ and $\eta$ each vary
+by three orders of magnitude. Crucially, MUG remained numerically stable at the
+physical liquid-metal point $\Pm=10^{-6}$, converging cleanly; Newton iteration
+counts peaked at the intermediate $\Pm=10^{-4}$ ($\sim\!39$) and eased to
+$\sim\!22$ at $\Pm=10^{-6}$, showing no stiffness pathology as the diffusivity
+ratio opens up. This extends the validation from the code-agreement $\Pm=1$ of the
+capstone to the physical LM parameter point.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.75\textwidth]{gap1_pm_sweep.png}
+\caption{Magnetic-Prandtl sweep at $\Ha=100$, $c=1$, holding $\nu\eta$ fixed
+($\nu=\sqrt{\Pm}$, $\eta=1/\sqrt{\Pm}$). The nondimensional core velocity
+$u=v_y\nu/(G a^2)$ is flat to $0.17\%$ across six decades of $\Pm$, down to the
+physical liquid-metal point $\Pm=10^{-6}$, and matches the validated $\Ha=100$,
+$c=1$ reference ($1.995\times10^{-4}$) to $0.26\%$. Velocity is $\Pm$-independent,
+as the physics requires, while $\nu$ and $\eta$ each swing by $10^{3}$.}
+\label{fig:pmsweep}
+\end{figure}
+
+\subsection{Reduced-model duct-drag closures}
+\label{sec:closures}
+Zero-dimensional (system-level) LM-MHD models represent the unresolved Hartmann
+layers by an effective linear drag $\alpha_{\rm eff}$ on the core flow. The closure
+pre-existing in the code was the one-dimensional Hartmann \emph{channel} response,
+for which the core velocity scales as $\Ha^{-2}$. Our resolved MUG runs show that a
+real rectangular \emph{duct} behaves differently, and that the channel closure is
+quantitatively wrong for it.
+
+For an \emph{insulating} duct, the side walls parallel to $\mathbf{B}_0$ carry the
+return current through the thin Shercliff side layers, weakening the core braking:
+the core velocity scales as $\Ha^{-1}$, not $\Ha^{-2}$, so the channel closure
+over-brakes a duct by a full factor of $\Ha$. The corrected closure is
+$\alpha_{\rm eff}=(\nu/a^2)\,\Ha$ (core $\sim\Ha^{-1}$), which matches resolved MUG
+runs (insulating, $c=10^{-4}$) to $0.3$--$1.0\%$ at both $\Ha=20$ and $\Ha=100$.
+For a \emph{conducting} (Hunt) duct the core velocity scales as
+$(1+1/c)/\Ha^{2}$, giving $\alpha_{\rm eff}=(\nu/a^2)\,\Ha^{2}/(1+1/c)$; this
+matches the resolved Hunt $c=1$ core to $0.25\%$ at $\Ha=100$ (its high-$\Ha$
+asymptote), with a $\sim\!16\%$ finite-$\Ha$ correction at $\Ha=20$ that becomes
+negligible at blanket-relevant $\Ha\sim10^{3}$--$10^{4}$. In the perfect-conductor
+limit $c\!\to\!\infty$ the conducting-duct closure recovers the $\Ha^{-2}$ channel
+response, as it must. These closures give the reduced model a correct wall-drag law
+for real duct and blanket geometry, in place of the channel expression that
+over-brakes an insulating duct by $\Ha$.
+
+\subsection{Coupling-formula validation}
+\label{sec:coupling}
+The plasma-blanket coupling utilities --- blanket-to-plasma induced-field feedback
+via Biot--Savart, the dimensionless regime metrics, and the plasma-facing sheath
+and liquid-surface thermal loads --- are formula-level and were each validated
+against an exact analytic reference to machine precision. The axisymmetric
+circular-loop poloidal field matches the exact on-axis Biot--Savart form to
+$10^{-16}$ and an independent numerical loop-integration off-axis to $10^{-15}$.
+The regime metrics ($\Ha$, Alfv\'en speed, magnetic Reynolds number, interaction
+parameter) reproduce their definitions exactly. The Bohm sound speed and the
+semi-infinite constant-flux surface temperature rise
+$\Delta T=2q\sqrt{\alpha t/\pi}/k$ likewise match exactly. To be clear about scope:
+this validates the coupling \emph{formulas} and proves the underlying field
+computation exact; the full runtime coupled loop (resolved blanket current
+$\to$ induced field $\to$ plasma equilibrium and back) is separate future
+integration work, now resting on a field computation that has been verified to
+machine precision.
+
+%==============================================================================
 \section{Discussion and conclusions}
 %==============================================================================
 An independent analytic-and-COMSOL validation ladder establishes MUG as a credible
@@ -285,9 +374,27 @@ finite-conductance corner relevant to blanket design. The transient conjugate-wa
 capstone demonstrates the genuinely finite-$\Rm$, time-dependent electromagnetic
 coupling to a few percent in both velocity and induced field, with Alfv\'en timing
 and dissipation independently confirmed, and delimits the transient validity of the
-thin-wall approximation --- a result of independent physical interest. The two
-solver corrections and the Robin boundary condition are suitable for upstream
-contribution to OpenFUSIONToolkit.
+thin-wall approximation --- a result of independent physical interest. The
+$\Pm$ sweep (Section~\ref{sec:lowpm}) further shows the solver stable and accurate
+at the physical liquid-metal point $\Pm=10^{-6}$, and the reduced-model closures of
+Section~\ref{sec:closures} correct the system-level wall-drag law for real duct
+geometry. The two solver corrections and the Robin boundary condition are suitable
+for upstream contribution to OpenFUSIONToolkit.
+
+\paragraph{Incompressible recirculation.} Separated-flow blanket geometries
+(sudden-expansion and backward-facing-step manifolds) require MUG's low-Mach
+\texttt{true\_pressure} mode to sustain clean incompressible recirculation. We
+tested this on a lid-driven cavity at $\mathrm{Re}=100$. At $\mathrm{Ma}\approx0.08$,
+developed to steady state ($t=400$), MUG produces bounded incompressible
+recirculation: the density deviation stays flat at $1.8\%$ (not growing), the
+primary vortex migrates onto the Ghia~et~al.~\cite{ghia1982} benchmark to within
+$0.025$ (final center $(0.637,0.750)$ versus $(0.617,0.734)$), and the median
+$|\nabla\!\cdot\!\mathbf{v}|/|\nabla\mathbf{v}|$ falls to $0.4\%$. An earlier
+higher-Mach run ($\mathrm{Ma}\approx0.2$) had shown $\sim\!10\%$ growing
+compressibility; this was a Mach-number artifact (density deviation scales as
+$\mathrm{Ma}^2$), not a solver defect. This establishes the incompressible-recirculation
+capability needed for separated flows; the remaining challenge for open geometries
+is a non-reflecting outflow boundary condition, not the recirculation itself.
 
 \paragraph{Reproducibility.} MUG's adaptive time step is capped at the initial
 namelist value and only shrinks; the namelist step should therefore be set to the
@@ -302,6 +409,9 @@ Meshes use per-direction boundary-layer grading. Drivers and comparison tooling
 pipes under transverse magnetic fields,'' \emph{Proc.\ Camb.\ Phil.\ Soc.}\ \textbf{49}, 136 (1953).
 \bibitem{hunt1965} J.~C.~R.~Hunt, ``Magnetohydrodynamic flow in rectangular ducts,''
 \emph{J.\ Fluid Mech.}\ \textbf{21}, 577 (1965).
+\bibitem{ghia1982} U.~Ghia, K.~N.~Ghia, and C.~T.~Shin, ``High-Re solutions for
+incompressible flow using the Navier--Stokes equations and a multigrid method,''
+\emph{J.\ Comput.\ Phys.}\ \textbf{48}, 387 (1982).
 \end{thebibliography}
 
 \end{document}
