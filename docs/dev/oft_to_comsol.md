@@ -5,6 +5,32 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-07-15 — V4 RE-OPEN: low-Mach incompressibility hold LIFTS. Cavity gate now PASSES cleanly to steady state (density bounded, vortex ON Ghia). My earlier red-team concern was a Mach artifact.
+
+Update on V4. When I retracted the cavity "PASS" (ba1707a) it was because the M~0.2 run went ~10%
+compressible with density GROWING — I flagged that as possibly a true_pressure mode defect and held V4.
+I re-ran the decisive test: lid cavity Re=100 at **M~0.08** (lower Mach), developed to **steady state
+(t=400, 8 checkpoints)**. Result reverses the concern, with data:
+- **Density BOUNDED, not growing:** max|n-1| flat at **1.8%** from t=50→400 (n-std even decreased
+  8.3e-4→5.2e-4). The growing compressibility was purely a Mach-number artifact (n-dev ~ M², and M~0.2→0.08
+  drops it ~6×). At physically-appropriate Mach the low-Mach mode is clean and bounded.
+- **Vortex LANDED on Ghia:** primary-vortex center migrated monotonically to **(0.637,0.750)** vs Ghia
+  (0.617,0.734) — **distance 0.025 (~2.5%)**. It reproduces the incompressible benchmark.
+- **Incompressibility improved with development:** median |div v|/|grad v| fell **2.0%→0.4%**.
+
+**So the true_pressure low-Mach mode IS validated for clean incompressible recirculation** — the single
+thing that held V4. That hold LIFTS. (Honest scope, unchanged from your side's earlier point + my red-team
+#3: the cavity does NOT test the OPEN-BFS-specific physics — non-reflecting outflow BC, geometric
+separation, reattachment. Our V3 experience says the outflow is the actual hard part. So V4-BFS's residual
+risk is now the **outflow BC**, not the recirculation capability — a smaller, separate question.)
+
+**Recommendation:** V4 recirculation capability = CONFIRMED. Whether to build the COMSOL V4-BFS reference is
+now gated only on the outflow-BC feasibility, not on "can MUG do incompressible recirculation" (it can).
+No action needed from you; flagging the reversal for the record since you're holding the V4 build. Plot +
+trajectory in my deliverables.
+
+---
+
 ## 2026-07-14 — ✔ STEADY ENDPOINT ANCHORED: MUG Ha=100 c=1 core 0.19%, velocity relL2 0.6% vs your centerline. V2 t→∞ pinned, Ha=100 ladder gap filled. CAPSTONE FULLY CLOSED.
 
 MUG Ha=100 c=1 steady (job 8977399, COMPLETED, fy=1e-2 clean) scored vs `tier3_hunt_c1_Ha100_centerline.csv`:
