@@ -151,3 +151,56 @@ def test_snapshot_rejects_inconsistent_shapes():
 def test_sheet_delta_b_rejects_nonphysical_thickness():
     with pytest.raises(ValueError, match="conducting_thickness"):
         sheet_delta_b(1.0e5, 0.0)
+
+
+# --- Coupling formula validation vs exact analytic references (gap-4 coupling half) ---
+import importlib.util as _ilu
+from pathlib import Path as _Path
+
+_MU0 = 4.0e-7 * np.pi
+
+
+def _load_coupling():
+    import sys as _sys
+    p = _Path(__file__).resolve().parents[2] / "python" / "OpenFUSIONToolkit" / "LM_MHD" / "coupling.py"
+    s = _ilu.spec_from_file_location("lm_coupling_valid", p)
+    m = _ilu.module_from_spec(s)
+    _sys.modules[s.name] = m          # dataclass introspection needs the module registered
+    s.loader.exec_module(m)
+    return m
+
+
+def test_circular_loop_field_matches_exact_on_axis():
+    cp = _load_coupling()
+    a, z0, I = 1.3, 0.2, 1.0e5
+    zeta = np.array([0.0, 0.5, 1.0, 2.0])
+    probes = np.column_stack([np.zeros_like(zeta), zeta + z0])
+    fld = cp.circular_loop_poloidal_field(a, z0, I, probes)
+    exact_bz = _MU0 * I * a**2 / (2.0 * (a**2 + zeta**2) ** 1.5)
+    assert np.allclose(fld[:, 1], exact_bz, rtol=1e-10)
+    assert np.allclose(fld[:, 0], 0.0, atol=1e-12)          # on-axis B_R = 0
+    assert fld[0, 1] == pytest.approx(_MU0 * I / (2 * a), rel=1e-10)  # loop-center field
+
+
+def test_circular_loop_field_matches_numerical_biot_savart():
+    cp = _load_coupling()
+    a, z0, I = 1.3, 0.2, 1.0e5
+    for R, z in [(0.5, 0.2), (0.9, 0.6), (1.8, -0.4)]:
+        f = cp.circular_loop_poloidal_field(a, z0, I, np.array([[R, z]]))[0]
+        phi = np.linspace(0, 2 * np.pi, 20000, endpoint=False); dphi = 2 * np.pi / 20000
+        lx, ly, lz = a * np.cos(phi), a * np.sin(phi), np.full_like(phi, z0)
+        dlx, dly = -a * np.sin(phi) * dphi, a * np.cos(phi) * dphi
+        sx, sy, sz = R - lx, -ly, z - lz
+        s3 = (sx * sx + sy * sy + sz * sz) ** 1.5
+        k = _MU0 * I / (4.0 * np.pi)
+        Bx = k * np.sum((dly * sz) / s3); Bz = k * np.sum((dlx * sy - dly * sx) / s3)
+        assert f[0] == pytest.approx(Bx, rel=1e-4) and f[1] == pytest.approx(Bz, rel=1e-4)
+
+
+def test_regime_metrics_match_definitions():
+    cp = _load_coupling()
+    sigma, rho, nu, B, U, L = 7.7e5, 9400.0, 1.1e-7, 4.0, 0.1, 0.1
+    assert cp.hartmann_number(B, L, sigma, rho, nu) == pytest.approx(B * L * np.sqrt(sigma / (rho * nu)))
+    assert cp.alfven_speed(B, rho) == pytest.approx(B / np.sqrt(_MU0 * rho))
+    assert cp.magnetic_reynolds_number(U, L, sigma) == pytest.approx(_MU0 * sigma * U * L)
+    assert cp.interaction_parameter(B, L, U, sigma, rho) == pytest.approx(sigma * B**2 * L / (rho * U))
