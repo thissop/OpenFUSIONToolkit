@@ -47,6 +47,9 @@ PRIVATE
 TYPE, extends(oft_noop_matrix) :: xmhd_2d_nlfun
   REAL(r8) :: dt = -1.d0 !< time step
   REAL(r8) :: diag_vals(5) = 0.d0 !< diagnostic values
+  REAL(r8) :: obs_vals(3) = 0.d0 !< LM-MHD fluid observables (Cartesian disruption): (1) Fl_net = int (B0/mu0)*d(by)/dz
+                                 !< [Lorentz force density], (2) Fl_abs = int |(B0/mu0)*d(by)/dz|,
+                                 !< (3) EJf_rate = int eta*|grad by|^2/mu0 [= eta_res*J^2, since MUG eta = eta_res/mu0]
   TYPE(oft_xmhd_2d_sim), pointer :: parent_sim => NULL() !< pointer to parent simulation object for access to parameters
   CONTAINS
   !> Apply the matrix
@@ -188,6 +191,10 @@ character(LEN=TDIFF_RST_LEN) :: rst_char
 integer(i4) :: i,j,io_stat,rst_tmp,npre
 real(r8) :: n_avg, u_avg(3), T_avg, psi_avg, by_avg,elapsed_time
 real(r8), pointer :: plot_vals(:),plot_vec(:,:)
+!---LM-MHD disruption moments (per-step observables) — written only when use_by_source is on
+integer(i4) :: mom_unit
+real(r8) :: Umax
+real(r8), pointer :: vely_arr(:)
 current_sim=>self
 
 !---------------------------------------------------------------------------
@@ -300,6 +307,14 @@ IF(oft_env%head_proc)THEN
   CALL hist_file%open ! Open history file
 END IF
 
+!---LM-MHD disruption moments: per-step fluid observables (peaks + Joule impulse are reduced
+!   offline). Only opened when the disruption source is active, so ordinary runs are untouched.
+NULLIFY(vely_arr)
+IF(oft_env%head_proc .AND. self%use_by_source)THEN
+  OPEN(NEWUNIT=mom_unit, FILE='xmhd_2d.moments')
+  WRITE(mom_unit,'(A)') '# t  Fl_net  Fl_abs  EJf_rate  Umax   (MUG units; by<->bz, EJf_rate=eta_res*J^2)'
+END IF
+
 !---------------------------------------------------------------------------
 ! Begin time stepping
 !---------------------------------------------------------------------------
@@ -349,6 +364,15 @@ DO i=1,self%nsteps
     IF(oft_debug_print(1))WRITE(*,*)
     CALL hist_file%write(data_i4=hist_i4, data_r4=hist_r4)
   END IF
+  !---LM-MHD disruption moments: peak velocity + fluid observables at the new time t+dt
+  !   (obs_vals reflect the just-converged residual eval). Offline: peak over t, Joule impulse = int EJf dt.
+  IF(self%use_by_source)THEN
+    CALL u%get_local(vely_arr,3)
+    Umax=MAXVAL(ABS(vely_arr))
+    IF(oft_env%head_proc) WRITE(mom_unit,'(5ES20.10)') self%t+self%dt, &
+      self%nlfun%obs_vals(1), self%nlfun%obs_vals(2), self%nlfun%obs_vals(3), Umax
+    DEALLOCATE(vely_arr); NULLIFY(vely_arr)
+  END IF
   !---------------------------------------------------------------------------
   ! Update timestep and save solution
   !---------------------------------------------------------------------------
@@ -377,6 +401,11 @@ DO i=1,self%nsteps
   IF(ABS(1.d0-(self%dt-dthist(MOD(i,XMHD_ITCACHE)+1))/dthist(MOD(i,XMHD_ITCACHE)+1))>0.1d0)npre=-1
 END DO
 CALL hist_file%close()
+IF(oft_env%head_proc .AND. self%use_by_source)THEN
+  CLOSE(mom_unit)
+  WRITE(*,'(A)') 'Wrote xmhd_2d.moments (per-step LM-MHD disruption observables)'
+END IF
+IF(ASSOCIATED(vely_arr))DEALLOCATE(vely_arr)
 CALL nksolver%delete()
 CALL solver%delete()
 CALL u%delete()
@@ -775,6 +804,7 @@ INTEGER(i4) :: i,l
 REAL(r8) :: k_boltz = elec_charge
 REAL(r8) :: m_i=proton_mass
 REAL(r8) :: chi, eta, nu, D_diff, gamma, diag_vals(5), B_0(3), diag_vec(3)
+REAL(r8) :: obs_vals(3) !< LM-MHD fluid observables accumulator (Fl_net, Fl_abs, EJf_rate)
 LOGICAL :: use_wall_drag
 REAL(r8) :: drag_coeff, drag_bhat(3)
 LOGICAL :: use_body_force
@@ -837,6 +867,7 @@ CALL b%get_local(T_res, 5)
 CALL b%get_local(psi_res, 6)
 CALL b%get_local(by_res, 7)
 diag_vals=0.d0
+obs_vals=0.d0
 
 !!$omp parallel reduction(+:diag_vals)
 BLOCK
@@ -850,7 +881,7 @@ REAL(r8), ALLOCATABLE, DIMENSION(:) :: basis_vals,T_weights_loc,n_weights_loc,ps
 REAL(r8), ALLOCATABLE, DIMENSION(:,:) :: vel_weights_loc,basis_grads,res_loc
 !$omp parallel private(k,m,jr,curved,coords,cell_dofs,basis_vals,basis_grads,T_weights_loc, &
 !$omp n_weights_loc,psi_weights_loc, by_weights_loc,vel_weights_loc,res_loc,jac_mat, &
-!$omp jac_det,int_factor,T,n,psi,by,vel,dT,dn,dpsi,dby,dvel,div_vel,btmp,tmp1,vdotb_drag) reduction(+:diag_vals)
+!$omp jac_det,int_factor,T,n,psi,by,vel,dT,dn,dpsi,dby,dvel,div_vel,btmp,tmp1,vdotb_drag) reduction(+:diag_vals,obs_vals)
 ALLOCATE(basis_vals(oft_blagrange%nce),basis_grads(3,oft_blagrange%nce))
 ALLOCATE(T_weights_loc(oft_blagrange%nce),n_weights_loc(oft_blagrange%nce),&
         psi_weights_loc(oft_blagrange%nce), by_weights_loc(oft_blagrange%nce),&
@@ -922,6 +953,12 @@ DO i=1,mesh%nc
       diag_vals(4) = diag_vals(4) + T*int_factor
       diag_vals(5) = diag_vals(5) + int_factor !total volume
     END IF
+    !---LM-MHD fluid observables (Cartesian disruption): MUG by<->box-1 bz, dby(3)=d(by)/dz<->bzy,
+    !   B_0(3)=Hartmann B0. Physical Lorentz-force density (J x B)_axial and Joule rate eta_res*J^2
+    !   (eta is the diffusivity = eta_res/mu0, so eta_res*J^2 = eta*|grad by|^2/mu0). Cartesian only.
+    obs_vals(1) = obs_vals(1) + (B_0(3)/mu0)*dby(3)*int_factor                        ! Fl_net
+    obs_vals(2) = obs_vals(2) + ABS((B_0(3)/mu0)*dby(3))*int_factor                   ! Fl_abs
+    obs_vals(3) = obs_vals(3) + eta*(dby(1)*dby(1)+dby(3)*dby(3))/mu0*int_factor      ! EJf_rate
     !---Precompute wall-drag projection (independent of test function index jr)
     IF(use_wall_drag) vdotb_drag = DOT_PRODUCT(vel, drag_bhat)
     !---Compute local function contributions
@@ -1144,6 +1181,7 @@ CALL b%restore_local(T_res,5,add=.TRUE.,wait=.TRUE.)
 CALL b%restore_local(psi_res,6,add=.TRUE.,wait=.TRUE.)
 CALL b%restore_local(by_res,7,add=.TRUE.)
 self%diag_vals=oft_mpi_sum(diag_vals,5)
+self%obs_vals=oft_mpi_sum(obs_vals,3)
 !---Cleanup remaining storage
 DEALLOCATE(n_res,velx_res,vely_res, velz_res, T_res, psi_res, by_res, &
         n_weights,vel_weights, T_weights, psi_weights, by_weights)
