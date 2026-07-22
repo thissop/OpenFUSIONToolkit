@@ -100,6 +100,14 @@ TYPE, public :: oft_xmhd_2d_sim
   !    pressure-gradient and viscous terms). Constant => no Jacobian contribution.
   LOGICAL :: use_body_force = .FALSE. !< Enable uniform body-force momentum source
   REAL(r8) :: body_force(3) = [0.d0,0.d0,0.d0] !< Body force per unit mass [accel units]
+  !--- LM-MHD disruption/ELM drive: a UNIFORM time-varying source S(t) = -dB0z/dt in the
+  !    by (out-of-plane induced field) equation. Represents a decaying poloidal field ramping
+  !    over tau_q. S(t) = (dB/tau_q)*(t<tau_q)*min(t/(tau_q/50),1); default off => no source
+  !    (regression-safe). Uniform in space + independent of the solution => residual-only, no
+  !    Jacobian contribution. Matches the P1 reduced-model source (docs comsol side).
+  LOGICAL :: use_by_source = .FALSE. !< enable the disruption source in the by induction
+  REAL(r8) :: by_source_dB   = 0.d0  !< total field change dB of the ramp [field units]
+  REAL(r8) :: by_source_tauq = 0.d0  !< ramp duration tau_q [time units]
   !--- Conducting-wall (Robin) EM boundary condition: LM-MHD Phase-4, default off.
   !    Thin-wall condition on the axial induced field:  by + c_wall*d(by)/dn = 0, with
   !    c_wall = sigma_w*t_w/(sigma_f*a) the wall-conductance ratio (wall conductivity*thickness
@@ -771,6 +779,8 @@ LOGICAL :: use_wall_drag
 REAL(r8) :: drag_coeff, drag_bhat(3)
 LOGICAL :: use_body_force
 REAL(r8) :: body_force(3)
+LOGICAL :: use_by_source
+REAL(r8) :: by_source_dB, by_source_tauq, S_by, t_eval
 REAL(r8), POINTER, DIMENSION(:) :: n_weights,T_weights,psi_weights,by_weights, T_res, &
                               n_res, psi_res, by_res, vtmp, velx_res, vely_res, velz_res
 REAL(r8), POINTER, DIMENSION(:,:) :: vel_weights
@@ -805,6 +815,17 @@ drag_coeff    = self%parent_sim%drag_coeff
 drag_bhat     = self%parent_sim%drag_bhat
 use_body_force = self%parent_sim%use_body_force
 body_force     = self%parent_sim%body_force
+!--- Disruption/ELM source S(t) = -dB0z/dt in the by induction (uniform in space; evaluated
+!    at the backward-Euler NEW time t+dt). Computed ONCE per residual call (time-only).
+use_by_source  = self%parent_sim%use_by_source
+by_source_dB   = self%parent_sim%by_source_dB
+by_source_tauq = self%parent_sim%by_source_tauq
+S_by = 0.d0
+IF(use_by_source .AND. by_source_tauq > 0.d0)THEN
+  t_eval = self%parent_sim%t + self%dt
+  IF(t_eval < by_source_tauq) &
+    S_by = (by_source_dB/by_source_tauq)*MIN(t_eval/(by_source_tauq/50.d0), 1.d0)
+END IF
 
 !---Zero result and get storage array
 CALL b%set(0.d0)
@@ -1049,7 +1070,8 @@ DO i=1,mesh%nc
         + basis_vals(jr)*self%dt*tmp1(2)*int_factor &
         + basis_vals(jr)*self%dt*DOT_PRODUCT(vel, dby)*int_factor &
         + basis_vals(jr)*self%dt*by*div_vel*int_factor &
-        + self%dt*eta*DOT_PRODUCT(basis_grads(:,jr), dby)*int_factor
+        + self%dt*eta*DOT_PRODUCT(basis_grads(:,jr), dby)*int_factor &
+        - self%dt*basis_vals(jr)*S_by*int_factor    ! disruption source S(t)=-dB0z/dt (uniform, time-only)
       END IF
     END DO
   END DO

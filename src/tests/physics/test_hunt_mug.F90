@@ -51,9 +51,14 @@ CHARACTER(LEN=256) :: restart_file = '' !< if set, continue from this .rst inste
                                         !  vector, t, and dt are all restored from the file)
 INTEGER(i4) :: rst_base = 0             !< output restart index offset (continue numbering)
 LOGICAL :: pm = .FALSE.
+! LM-MHD disruption/ELM drive: uniform time-varying source S(t)=-dB0z/dt in the by
+! induction. Set by_source_tauq>0 to enable (poloidal-field ramp dB over tau_q). For a
+! pure-disruption run set fy=0 so the ONLY drive is the field ramp.
+REAL(r8) :: by_source_dB   = 0.d0    !< total field change dB of the ramp (0 => off)
+REAL(r8) :: by_source_tauq = 0.d0    !< ramp duration tau_q (0 => off)
 NAMELIST/hunt_options/ order, nsteps, rst_freq, ittarget, dt, a_half, B0, eta, &
   nu, fy, n0, t0, chi, D_diff, gamma, den_scale, lin_tol, nl_tol, c_wall, &
-  restart_file, rst_base, pm
+  restart_file, rst_base, pm, by_source_dB, by_source_tauq
 
 TYPE(oft_xmhd_2d_sim) :: mhd_sim
 TYPE(multigrid_mesh) :: mg_mesh
@@ -83,9 +88,13 @@ mhd_sim%den_scale = den_scale
 mhd_sim%lin_tol   = lin_tol
 mhd_sim%nl_tol    = nl_tol
 mhd_sim%mfnk      = .FALSE.
-mhd_sim%B_0       = [0.d0, 0.d0, B0]    ! Hartmann direction (in-plane z)
+mhd_sim%B_0       = [0.d0, 0.d0, B0]    ! Hartmann direction (in-plane z) = reduced-model B0y
 mhd_sim%use_body_force = .TRUE.
-mhd_sim%body_force = [0.d0, fy, 0.d0]   ! axial (out-of-plane) drive
+mhd_sim%body_force = [0.d0, fy, 0.d0]   ! axial (out-of-plane) drive (fy=0 for pure disruption)
+! Disruption/ELM source S(t)=-dB0z/dt in the by (axial induced field) equation:
+mhd_sim%use_by_source  = (by_source_tauq > 0.d0)
+mhd_sim%by_source_dB   = by_source_dB
+mhd_sim%by_source_tauq = by_source_tauq
 ! drag stays OFF (default use_wall_drag=.FALSE.)
 
 rho = proton_mass * n0 * den_scale
