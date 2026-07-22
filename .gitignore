@@ -25,3 +25,4 @@ __pycache__
 /oft_venv/
 /compiler_id.txt
 /setup_env.sh
+deliverables/lm_mhd_for_yuchen/references/*.pdf
