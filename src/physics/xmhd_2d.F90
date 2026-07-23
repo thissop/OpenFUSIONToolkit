@@ -47,9 +47,11 @@ PRIVATE
 TYPE, extends(oft_noop_matrix) :: xmhd_2d_nlfun
   REAL(r8) :: dt = -1.d0 !< time step
   REAL(r8) :: diag_vals(5) = 0.d0 !< diagnostic values
-  REAL(r8) :: obs_vals(3) = 0.d0 !< LM-MHD fluid observables (Cartesian disruption): (1) Fl_net = int (B0/mu0)*d(by)/dz
+  REAL(r8) :: obs_vals(5) = 0.d0 !< LM-MHD observables (Cartesian disruption): (1) Fl_net = int (B0/mu0)*d(by)/dz
                                  !< [Lorentz force density], (2) Fl_abs = int |(B0/mu0)*d(by)/dz|,
-                                 !< (3) EJf_rate = int eta*|grad by|^2/mu0 [= eta_res*J^2, since MUG eta = eta_res/mu0]
+                                 !< (3) EJf_rate = int eta*|grad by|^2/mu0 [= eta_res*J^2, since MUG eta = eta_res/mu0],
+                                 !< (4) Iw = oint_walls |by|/mu0 dl [thin-wall sheet current K=by_wall/mu0],
+                                 !< (5) EJw_rate = oint_walls eta*by^2/(c_wall*a*mu0) dl [thin-wall wall Joule; a=a_half]
   TYPE(oft_xmhd_2d_sim), pointer :: parent_sim => NULL() !< pointer to parent simulation object for access to parameters
   CONTAINS
   !> Apply the matrix
@@ -122,6 +124,7 @@ TYPE, public :: oft_xmhd_2d_sim
   !    exact order-1 edge mass matrix. Cartesian + order=1 only (guarded in setup). The
   !    analogous psi Robin term (in-plane conjugate cases) is future work.
   REAL(r8) :: c_wall = 0.d0 !< Wall-conductance ratio for thin-wall Robin by BC (0 = off)
+  REAL(r8) :: a_half = 1.d0 !< duct half-width (for thin-wall wall-Joule observable EJw; set by driver)
   LOGICAL, CONTIGUOUS, POINTER, DIMENSION(:) :: n_bc => NULL() !< n BC flag
   LOGICAL, CONTIGUOUS, POINTER, DIMENSION(:) :: velx_bc => NULL() !< vel BC flag
   LOGICAL, CONTIGUOUS, POINTER, DIMENSION(:) :: vely_bc => NULL() !< vel BC flag
@@ -312,7 +315,8 @@ END IF
 NULLIFY(vely_arr)
 IF(oft_env%head_proc .AND. self%use_by_source)THEN
   OPEN(NEWUNIT=mom_unit, FILE='xmhd_2d.moments')
-  WRITE(mom_unit,'(A)') '# t  Fl_net  Fl_abs  EJf_rate  Umax   (MUG units; by<->bz, EJf_rate=eta_res*J^2)'
+  WRITE(mom_unit,'(A)') '# t  Fl_net  Fl_abs  EJf_rate  Umax  Iw  EJw_rate   (MUG units; by<->bz; '// &
+    'Iw=oint|by|/mu0, EJw=oint eta*by^2/(c_wall*a*mu0))'
 END IF
 
 !---------------------------------------------------------------------------
@@ -369,8 +373,9 @@ DO i=1,self%nsteps
   IF(self%use_by_source)THEN
     CALL u%get_local(vely_arr,3)
     Umax=MAXVAL(ABS(vely_arr))
-    IF(oft_env%head_proc) WRITE(mom_unit,'(5ES20.10)') self%t+self%dt, &
-      self%nlfun%obs_vals(1), self%nlfun%obs_vals(2), self%nlfun%obs_vals(3), Umax
+    IF(oft_env%head_proc) WRITE(mom_unit,'(7ES20.10)') self%t+self%dt, &
+      self%nlfun%obs_vals(1), self%nlfun%obs_vals(2), self%nlfun%obs_vals(3), Umax, &
+      self%nlfun%obs_vals(4), self%nlfun%obs_vals(5)
     DEALLOCATE(vely_arr); NULLIFY(vely_arr)
   END IF
   !---------------------------------------------------------------------------
@@ -804,7 +809,7 @@ INTEGER(i4) :: i,l
 REAL(r8) :: k_boltz = elec_charge
 REAL(r8) :: m_i=proton_mass
 REAL(r8) :: chi, eta, nu, D_diff, gamma, diag_vals(5), B_0(3), diag_vec(3)
-REAL(r8) :: obs_vals(3) !< LM-MHD fluid observables accumulator (Fl_net, Fl_abs, EJf_rate)
+REAL(r8) :: obs_vals(5) !< LM-MHD observables accumulator (Fl_net, Fl_abs, EJf_rate, Iw, EJw_rate)
 LOGICAL :: use_wall_drag
 REAL(r8) :: drag_coeff, drag_bhat(3)
 LOGICAL :: use_body_force
@@ -1172,6 +1177,25 @@ IF(self%parent_sim%c_wall > 0.d0)THEN
   END DO
   END BLOCK
 END IF
+!---LM-MHD thin-wall wall observables (same Hartmann-wall edge set as the Robin BC above:
+!   boundary edges whose endpoints are FREE in by_bc). Order=1 so by is linear on each edge:
+!   Iw  = oint |by|/mu0 dl  ~ trapezoid on |by|;  EJw = oint eta*by^2/(c_wall*a*mu0) dl, exact int by^2.
+IF(self%parent_sim%use_by_source .AND. self%parent_sim%c_wall > 0.d0)THEN
+  BLOCK
+  INTEGER(i4) :: ke, ed, ip1, ip2
+  REAL(r8) :: elen, b1, b2, ejw_fac
+  ejw_fac = eta/(self%parent_sim%c_wall*self%parent_sim%a_half*mu0)
+  DO ke=1,mesh%nbe
+    ed = mesh%lbe(ke)
+    ip1 = mesh%le(1,ed); ip2 = mesh%le(2,ed)
+    IF(self%parent_sim%by_bc(ip1).OR.self%parent_sim%by_bc(ip2))CYCLE
+    elen = SQRT(SUM((mesh%r(:,ip1)-mesh%r(:,ip2))**2))
+    b1 = by_weights(ip1); b2 = by_weights(ip2)
+    obs_vals(4) = obs_vals(4) + 0.5d0*(ABS(b1)+ABS(b2))*elen/mu0             ! Iw = oint |by|/mu0 dl
+    obs_vals(5) = obs_vals(5) + ejw_fac*(b1*b1 + b1*b2 + b2*b2)*elen/3.d0    ! EJw = oint eta*by^2/(c_wall*a*mu0) dl
+  END DO
+  END BLOCK
+END IF
 !---Put results into full vector
 CALL b%restore_local(n_res,1,add=.TRUE.,wait=.TRUE.)
 CALL b%restore_local(velx_res,2,add=.TRUE.,wait=.TRUE.)
@@ -1181,7 +1205,7 @@ CALL b%restore_local(T_res,5,add=.TRUE.,wait=.TRUE.)
 CALL b%restore_local(psi_res,6,add=.TRUE.,wait=.TRUE.)
 CALL b%restore_local(by_res,7,add=.TRUE.)
 self%diag_vals=oft_mpi_sum(diag_vals,5)
-self%obs_vals=oft_mpi_sum(obs_vals,3)
+self%obs_vals=oft_mpi_sum(obs_vals,5)
 !---Cleanup remaining storage
 DEALLOCATE(n_res,velx_res,vely_res, velz_res, T_res, psi_res, by_res, &
         n_weights,vel_weights, T_weights, psi_weights, by_weights)

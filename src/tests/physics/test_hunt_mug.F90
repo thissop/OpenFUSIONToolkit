@@ -115,6 +115,7 @@ mhd_sim%psi_bc = .FALSE.
 ! Hartmann walls take the natural condition d(by)/dn=0 = PERFECT conductor
 ! (Hunt 1965); with c_wall>0 the Phase-4 thin-wall Robin term applies there.
 mhd_sim%c_wall = c_wall
+mhd_sim%a_half = a_half   ! for the thin-wall wall-Joule observable EJw
 ALLOCATE(mhd_sim%by_bc(ML_oft_blagrange%current_level%ne))
 mhd_sim%by_bc = .FALSE.
 BLOCK
