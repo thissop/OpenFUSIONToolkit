@@ -58,15 +58,20 @@ def load_comsol(path, case="tq1ms_c1_full"):
 
 
 def load_mug(path):
-    t, Fln, Fla, EJf, Um = [], [], [], [], []
-    with open(path) as f:
-        for ln in f:
-            if ln.startswith("#") or not ln.split():
-                continue
-            p = ln.split()
-            t.append(float(p[0])); Fln.append(float(p[1])); Fla.append(float(p[2]))
-            EJf.append(float(p[3])); Um.append(float(p[4]))
-    return dict(t=t, Fl_net=Fln, Fl_abs=Fla, EJf=EJf, Umax=Um)
+    # columns: t Fl_net Fl_abs EJf_rate Umax [Iw EJw_rate]  (last two present on wall-observable runs)
+    t, Fln, Fla, EJf, Um, Iw, EJw = [], [], [], [], [], [], []
+    for ln in open(path):
+        if ln.startswith("#") or not ln.split():
+            continue
+        p = ln.split()
+        t.append(float(p[0])); Fln.append(float(p[1])); Fla.append(float(p[2]))
+        EJf.append(float(p[3])); Um.append(float(p[4]))
+        if len(p) >= 7:
+            Iw.append(float(p[5])); EJw.append(float(p[6]))
+    d = dict(t=t, Fl_net=Fln, Fl_abs=Fla, EJf=EJf, Umax=Um)
+    if Iw:
+        d["Iw"] = Iw; d["EJw"] = EJw
+    return d
 
 
 def trapz(y, x):
@@ -82,7 +87,7 @@ def reduce_side(name, d, s, has_wall):
     impEJf = trapz(d["EJf"], t) / s["imp_ref"]
     out = dict(name=name, t_final=tnd[-1], peakU=peakU, tpeakU=tpeakU, impEJf=impEJf,
                peakFl=max(f / (s["B0"]*s["B0"]*s["a"]/MU0) for f in d["Fl_abs"]))
-    if has_wall:  # box 1 only
+    if d.get("Iw"):  # box 1 always; MUG on wall-observable runs
         out["peakIw"] = max(i / s["I_ref"] for i in d["Iw"])
         out["impEJw"] = trapz(d["EJw"], t) / s["imp_ref"]
         out["impEJtot"] = out["impEJf"] + out["impEJw"]
@@ -127,7 +132,16 @@ def main():
         print(f"    peak Umax/v_ref : MUG {m['peakU']:.4e} vs target {tgt['Umax']:.4e}  -> {du:.1f}%  {'PASS' if du<5 else 'CHECK'}")
         print(f"    Joule imp EJf*  : MUG {m['impEJf']:.4e} vs target {tgt['EJf']:.4e}  -> {de:.1f}%")
         print(f"    peak Fl (nondim): MUG {m['peakFl']:.4e} vs target {tgt['Fl']:.4e}  -> {df:.1f}% (box 1: don't lean on Fl)")
-        print(f"    Iw + wall-Joule: pending wall instrumentation (targets Iw*={tgt['Iw']:.4f}, EJw*={tgt['EJw']:.4f}).")
+        if m.get("peakIw") is not None:
+            di = abs(m["peakIw"] - tgt["Iw"]) / tgt["Iw"] * 100
+            dw = abs(m["impEJw"] - tgt["EJw"]) / tgt["EJw"] * 100
+            tot_t = tgt["EJf"] + tgt["EJw"]
+            dtot = abs(m["impEJtot"] - tot_t) / tot_t * 100
+            print(f"    peak Iw/I_ref   : MUG {m['peakIw']:.4e} vs target {tgt['Iw']:.4e}  -> {di:.1f}%  (box 1: ~15% expected)")
+            print(f"    Joule imp EJw*  : MUG {m['impEJw']:.4e} vs target {tgt['EJw']:.4e}  -> {dw:.1f}%")
+            print(f"    Joule imp TOTAL : MUG {m['impEJtot']:.4e} vs target {tot_t:.4e}  -> {dtot:.1f}%  {'PASS' if dtot<5 else 'CHECK'}")
+        else:
+            print(f"    Iw + wall-Joule: not in this run (fluid-only moments).")
 
 
 if __name__ == "__main__":
