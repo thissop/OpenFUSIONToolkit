@@ -13,6 +13,9 @@
 \newcommand{\relL}{\mathrm{relL2}}
 \newcommand{\by}{b_y}
 \newcommand{\tauA}{\tau_A}
+\newcommand{\tq}{\tau_q}
+\newcommand{\dB}{\Delta B}
+\newcommand{\umax}{U_{\max}}
 
 \title{\textbf{Validation of the OpenFUSIONToolkit MUG solver as a
 full-induction liquid-metal MHD code: an analytic and COMSOL cross-validation
@@ -360,6 +363,74 @@ computation exact; the full runtime coupled loop (resolved blanket current
 $\to$ induced field $\to$ plasma equilibrium and back) is separate future
 integration work, now resting on a field computation that has been verified to
 machine precision.
+
+%==============================================================================
+\section{Disruption-rate loads: two-code second-coding at the reactor point}
+\label{sec:disruption}
+%==============================================================================
+The transient capstone (Sec.~\ref{sec:v2}) establishes that MUG resolves the
+time-dependent electromagnetic coupling; the thin-wall/thick-wall result
+(Sec.~\ref{sec:v2}) shows \emph{when} a wall model matters transiently. Both point
+to the regime where full induction is not optional: a millisecond magnetic
+transient, i.e.\ a plasma \emph{disruption}. There the inductionless
+(quasi-static, QS) closure that underlies production blanket-MHD codes---in which
+the induced field is slaved to the applied field and $\partial_t\mathbf{b}$ is
+dropped---is no longer valid, and the transient loads on the liquid metal and the
+conducting walls must be computed with the induced field evolved. This is the
+defensible niche for a full-induction LM-MHD solver, and we validate MUG in it.
+
+We add a spatially uniform, time-only disruption source $S(t)=-\dot B_{0z}$ to the
+$\by$ induction, ramping a field change $\dB$ over $\tq$ with a smooth turn-on. On
+the field-aligned duct this reproduces exactly the reduced disruption model of the
+COMSOL reference (parity: $\by$ even, $v$ odd, wall-peaked shear). The reactor
+parameter point is PbLi at $\Ha=2645.7$, $\Pm=9.27\times10^{-8}$, conducting walls
+$c=1$, matched between codes as dimensionless groups; MUG and COMSOL run in
+independent unit systems reduced on the shared scales
+($\tau_\eta=a^2/\lambda$, $v_{\rm ref}=\lambda/a$, $I_{\rm ref}=B_0a/\mu_0$,
+$E_{\rm ref}=B_0^2a^2/\mu_0$). Predicted MUG values were logged \emph{blind} against
+COMSOL targets registered before the runs.
+
+\paragraph{Loads are second-coded.} At the disruption-rate headline point
+($\tq=1$~ms, where the QS surrogate mis-predicts the wall current by $235\%$ and the
+Joule impulse by $532\%$), MUG's independently computed full-induction loads
+reproduce the COMSOL full-induction reference to
+\[
+  \tfrac{\int\!E\!J\,dt}{E_{\rm ref}}:0.6\%,\qquad
+  \tfrac{I_w}{I_{\rm ref}}:3.3\%,\qquad
+  \tfrac{\int\!E\!J_{\rm wall}}{E_{\rm ref}}:1.1\%,
+\]
+i.e.\ the total Joule impulse, the peak conducting-wall current, and the wall
+dissipation all agree to a few percent. The agreement is \emph{mesh-robust}: on
+$256^2$ and $384^2$ packed meshes the loads move by $\lesssim1\%$. Because these
+are the ``truth'' side of the QS-error map, two independent full-induction codes
+agreeing on them makes the disruption-rate breakdown of the quasi-static closure a
+two-code result rather than a single-code artifact.
+
+\paragraph{Thin-wall validity boundary.} MUG applies the wall as the thin-wall
+Robin condition \eqref{eq:robin}; the COMSOL reference resolves it as a
+finite-thickness domain. Comparing the two across ramp rate at $c=1$ therefore
+\emph{measures} where the thin-wall model ceases to hold. The peak wall-current
+discrepancy grows monotonically as the ramp accelerates through the field-penetration
+crossover $\delta_w/t_w\!\sim\!1$ (at $\tq\approx1.76$~ms):
+$0.7\%$ at $\tq=10$~ms ($\delta_w/t_w\!\approx\!2.4$, valid),
+$5.2\%$ at $3$~ms ($1.3$, marginal),
+$13.6\%$ at $1$~ms ($0.75$, invalid). Thus the thin-wall boundary condition---also
+standard in blanket-MHD practice---becomes quantitatively unsafe precisely in the
+fast-disruption regime where full induction is required, a statement only the
+two-code (different wall-model) comparison exposes.
+
+\paragraph{Resolution limit of the pointwise velocity.} One observable is not
+resolution-robust in MUG. The peak axial velocity resides inside the Hartmann layer
+(thickness $a/\Ha\approx3.8\times10^{-4}$); MUG's structured packed-cube mesh places
+$\sim\!1.6$--$3$ cells there against $\sim\!42$ in the COMSOL graded mesh, so its
+pointwise near-wall $\umax$ is $\sim\!2.4\times$ high and converges only weakly under
+uniform refinement. The volume-integrated \emph{loads} are insensitive to this (they
+match to $\le3.3\%$ regardless), and at slow ramp---where the velocity peak sits in
+the bulk---MUG's $\umax$ matches to $0.8\%$; the discrepancy is a structured-mesh
+limitation at $\Ha\!\sim\!2600$, not a physics disagreement, and does not bear on the
+load-based disruption claim.\footnote{The slow-ramp ($\tq=300$~ms) anchor, requiring
+a long observation window at high $\Ha$, is enabled by an ILU-preconditioned solve;
+its full Joule-impulse cross-check is in progress.}
 
 %==============================================================================
 \section{Discussion and conclusions}
