@@ -19,7 +19,7 @@ USE multigrid, ONLY: multigrid_mesh
 !
 USE oft_la_base, ONLY: oft_vector, oft_matrix, oft_local_mat, oft_vector_ptr, &
   vector_extrapolate, oft_graph, oft_graph_ptr
-USE oft_solver_utils, ONLY: create_solver_xml, create_diag_pre
+USE oft_solver_utils, ONLY: create_solver_xml, create_diag_pre, create_ilu_pre
 USE oft_deriv_matrices, ONLY: oft_noop_matrix, oft_mf_matrix
 USE oft_solver_base, ONLY: oft_solver
 USE oft_native_solvers, ONLY: oft_nksolver, oft_native_gmres_solver
@@ -125,6 +125,7 @@ TYPE, public :: oft_xmhd_2d_sim
   !    analogous psi Robin term (in-plane conjugate cases) is future work.
   REAL(r8) :: c_wall = 0.d0 !< Wall-conductance ratio for thin-wall Robin by BC (0 = off)
   REAL(r8) :: a_half = 1.d0 !< duct half-width (for thin-wall wall-Joule observable EJw; set by driver)
+  LOGICAL :: use_ilu = .FALSE. !< use native ILU(0) preconditioner instead of diagonal (for stiff high-Ha solves)
   LOGICAL, CONTIGUOUS, POINTER, DIMENSION(:) :: n_bc => NULL() !< n BC flag
   LOGICAL, CONTIGUOUS, POINTER, DIMENSION(:) :: velx_bc => NULL() !< vel BC flag
   LOGICAL, CONTIGUOUS, POINTER, DIMENSION(:) :: vely_bc => NULL() !< vel BC flag
@@ -271,6 +272,8 @@ solver%pm=oft_env%pm
 NULLIFY(solver%pre)
 IF(ASSOCIATED(self%xml_pre_def))THEN
   CALL create_solver_xml(solver%pre,self%xml_pre_def)
+ELSE IF(self%use_ilu)THEN
+  CALL create_ilu_pre(solver%pre)   ! stronger than diagonal for stiff high-Ha solves
 ELSE
   CALL create_diag_pre(solver%pre)
 END IF
