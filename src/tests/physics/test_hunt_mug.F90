@@ -57,9 +57,10 @@ LOGICAL :: pm = .FALSE.
 REAL(r8) :: by_source_dB   = 0.d0    !< total field change dB of the ramp (0 => off)
 REAL(r8) :: by_source_tauq = 0.d0    !< ramp duration tau_q (0 => off)
 LOGICAL :: use_ilu = .FALSE.         !< use native ILU(0) preconditioner (for stiff high-Ha long-window solves)
+INTEGER(i4) :: pre_freq = 1          !< update Jacobian+preconditioner every pre_freq steps (>1 amortizes ILU refactor)
 NAMELIST/hunt_options/ order, nsteps, rst_freq, ittarget, dt, a_half, B0, eta, &
   nu, fy, n0, t0, chi, D_diff, gamma, den_scale, lin_tol, nl_tol, c_wall, &
-  restart_file, rst_base, pm, by_source_dB, by_source_tauq, use_ilu
+  restart_file, rst_base, pm, by_source_dB, by_source_tauq, use_ilu, pre_freq
 
 TYPE(oft_xmhd_2d_sim) :: mhd_sim
 TYPE(multigrid_mesh) :: mg_mesh
@@ -90,6 +91,7 @@ mhd_sim%lin_tol   = lin_tol
 mhd_sim%nl_tol    = nl_tol
 mhd_sim%mfnk      = .FALSE.
 mhd_sim%use_ilu   = use_ilu
+mhd_sim%pre_freq  = pre_freq
 mhd_sim%B_0       = [0.d0, 0.d0, B0]    ! Hartmann direction (in-plane z) = reduced-model B0y
 mhd_sim%use_body_force = .TRUE.
 mhd_sim%body_force = [0.d0, fy, 0.d0]   ! axial (out-of-plane) drive (fy=0 for pure disruption)

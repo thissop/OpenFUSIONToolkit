@@ -342,7 +342,10 @@ DO i=1,self%nsteps
     self%jac_dt=self%dt
   END IF
   npre = npre + 1
-  IF((.NOT.self%mfnk).OR.MOD(npre,self%pre_freq)==0)THEN
+  ! Update the Jacobian + preconditioner every pre_freq steps (default 1 = every step, unchanged).
+  ! For stiff high-Ha ILU runs, pre_freq>1 amortizes the expensive assembly+factorization over a
+  ! slowly-evolving transient, cutting per-step cost several-fold.
+  IF(MOD(npre,self%pre_freq)==0)THEN
     CALL update_jacobian(u)
     CALL solver%pre%update(.TRUE.)
   END IF
