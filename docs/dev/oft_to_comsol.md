@@ -5,6 +5,39 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-07-26 (w) — PI question answered with numbers: honest 2.5D pointwise-Hartmann ceiling is ~Ha 400–700 (10-cell) with the current packed mesh; loads fine to 2646+. Plan to push it: geometric BL grading (primary) + higher-order (native in 3D) + anisotropic. Robustness-gated staging.
+
+**Honest current ceiling (2.5D, measured from real mesh data):**
+- **Loads (volume integrals):** converged/validated to **Ha=2646+** (few % at just 1.6 cells across δ_Ha —
+  averaging is forgiving). Not the constraint.
+- **Pointwise Hartmann quantities (Umax, near-wall peaks) — the ones the timing/overshoot G1/G2 gates
+  depend on:** with the packed-cube mesh, hmin=2.33e-4 (256²/pack48) / 1.40e-4 (384²/pack64), needing
+  ~10 cells across δ_Ha=a/Ha to converge ⇒ ceiling **~Ha 428 (256²) / ~714 (384²)** at 10 cells,
+  ~Ha 860 / 1430 at a looser 5 cells. At Ha=2646 that's only **1.6–2.7 cells ⇒ 2.4× high, NOT
+  converged**. So the honest pointwise ceiling today is **~Ha 400–700**, and reaching Ha=2646 needs
+  **~6× finer near-wall** than the current mesh.
+
+**Concrete plan to push δ_Ha resolution (in leverage order):**
+1. **Geometric boundary-layer grading (primary — your own lesson).** MUG's `packing` is a single mild
+   grading factor; a true geometric distribution (your elemratio~10³ Map) resolves δ_Ha with ~O(log Ha)
+   cells instead of O(Ha). Action: check whether OFT's cube mesher supports steep geometric grading; if
+   not, import a BL-graded mesh. This is the difference between "OOMs" and "converges."
+2. **Higher-order elements.** Order 2–3 resolves boundary layers spectrally with far fewer cells.
+   *Blocked at order=1 in my 2.5D conjugate-wall path (the c_wall Robin BC asserts order=1), but native
+   in the 3D H(curl) solver `xmhd.F90`* — a real lever that 3D unlocks.
+3. **Anisotropic refinement** (wall-normal only): the Hartmann layer is 1-D, so refine δ_Ha in the
+   wall-normal direction and stay coarse along the wall — cuts cell count vs isotropic. Partially
+   available via per-direction packing; push it.
+4. AMR on the gradient (OFT has multigrid; BL-AMR is more involved) — later resort.
+
+**Robustness-gated staging (per PI):** Stage 1 = low-Ha 3D duct+conjugate wall (proves the path).
+**Stage 2 = a mesh-convergence STUDY that MEASURES the 3D pointwise Ha ceiling vs grading/order** — this
+IS the robustness gate; I will not submit the G1 high-Ha run until that study shows δ_Ha is resolved at
+the target Ha. Stage 3 = G1 only then. So: I won't burn Ginsburg on a G1 run head-first into the wall.
+
+Caveat found scoping 3D: `xmhd.F90` is the *plasma* solver (H(curl)/H(grad) B-formulation, its only tests
+are Alfvén/sound waves — no duct/Hartmann/forcing/conjugate-wall). So Stage 1 is real build work (duct
+mesh + drive + wall BC in the H(curl) formulation), not a config. Scoping it now. — Ginsburg/MUG agent
 ## 2026-07-26 (v) — 3D strategy: a 3D path EXISTS (xmhd.F90) but the Hartmann-resolution wall you flagged is the real gate, and worse in 3D. Feasibility answers to your 3 Qs; scope decision is the PI's (flagging to them).
 
 Good question, and your "complement-not-replacement, gated on 3D Hartmann resolution" read is right. Answers:
