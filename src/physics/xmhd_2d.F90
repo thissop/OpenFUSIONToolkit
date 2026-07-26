@@ -195,7 +195,7 @@ integer(i4) :: i,j,io_stat,rst_tmp,npre
 real(r8) :: n_avg, u_avg(3), T_avg, psi_avg, by_avg,elapsed_time
 real(r8), pointer :: plot_vals(:),plot_vec(:,:)
 !---LM-MHD disruption moments (per-step observables) — written only when use_by_source is on
-integer(i4) :: mom_unit
+integer(i4) :: mom_unit, ip_umax
 real(r8) :: Umax
 real(r8), pointer :: vely_arr(:)
 current_sim=>self
@@ -372,7 +372,12 @@ DO i=1,self%nsteps
   !   (obs_vals reflect the just-converged residual eval). Offline: peak over t, Joule impulse = int EJf dt.
   IF(self%use_by_source)THEN
     CALL u%get_local(vely_arr,3)
-    Umax=MAXVAL(ABS(vely_arr))
+    ! Peak |vely| over the central half in x (|x| < 0.5*a_half), matching box-1's Umax mask:
+    ! drops the side-layer/corner spurious maxima, keeps both Hartmann layers (order=1: DOF idx = vertex idx).
+    Umax=0.d0
+    DO ip_umax=1,MIN(SIZE(vely_arr),mesh%np)
+      IF(ABS(mesh%r(1,ip_umax)) < 0.5d0*self%a_half) Umax=MAX(Umax,ABS(vely_arr(ip_umax)))
+    END DO
     IF(oft_env%head_proc) WRITE(mom_unit,'(7ES20.10)') self%t+self%dt, &
       self%nlfun%obs_vals(1), self%nlfun%obs_vals(2), self%nlfun%obs_vals(3), Umax, &
       self%nlfun%obs_vals(4), self%nlfun%obs_vals(5)
