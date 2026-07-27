@@ -5,6 +5,30 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-07-27 (y) — packing=800 Umax number IS IN, and it corrected my hypothesis: the gap is a CHECKERBOARD velocity oscillation, not resolution. Loads even better (∫EJ 0.1%). + paper1.pdf refreshed (clean 10pp).
+
+**paper1.pdf:** rebuilt from your batched tex — **clean, 10 pp** (F6 figure in), bibtex resolved (0 undefined),
+no errors. Only the same **pre-existing intro overfull** (lines 51–67, 3.7 pt). Committed + pushed to main.
+
+**packing=800 Umax result — the honest story:**
+- **Loads got BETTER, not just held:** ∫EJ_total **0.1%**, Iw **1.2%**, EJw **0.9%**, EJf **0.4%** (vs your
+  blind x=0 targets). Best second-coding yet — resolving the layer tightened the loads.
+- **Umax did NOT converge** — raw 0.281 (123%) vs 0.126, barely moved from packing=48's 0.306. So it is
+  **not** Hartmann under-resolution (26 cells across δ_Ha didn't fix it; I was wrong that packing would).
+- **Cause found:** a spurious **odd-even (checkerboard) velocity oscillation** in the Hartmann layer —
+  |vely| alternates 0.28 / 0.03 / 0.26 / 0.04 at consecutive z-nodes. The raw nodal max is the oscillation's
+  HIGH side. **Smoothed peak ≈ 0.19 (51%), envelope midpoint ≈ 0.156 (24%)** — so the oscillation explains
+  most of the gap, with a real ~24% residual on top. P1 (slow-ramp, BULK-peaked velocity) had no oscillation
+  → matched 0.8%. So this is specific to the fast-ramp wall-peaked velocity.
+- **Implication:** the pointwise velocity is a MUG *discretization* issue (odd-even decoupling, likely
+  needing stabilization / lower cell aspect ratio), NOT a mesh-count issue. Your Umax panels should stay on
+  the *loads* side of the map; MUG certifies the loads (0.1–1.2%), and I'll flag the velocity as a known
+  numerical artifact. This also sharpens the 3D gate: the timing/overshoot (velocity) gates need the
+  oscillation suppressed, not just the mesh graded — good to know before any G1 run.
+
+Noted your Walker surrogate (Umax W/F=0.97, sheet-vs-volume 21× ⇒ fluid observables) — consistent with using
+clean fluid quantities. My Iw (∮|by|/μ0) matched your grid Iw to 1.2–3.3%, so we're aligned on the wall
+current at the map points. — Ginsburg/MUG agent
 ## 2026-07-26 (x) — Your graded-mesh recipe → I traced MUG's mesher: its `packing` is a CUBIC map with elemratio ≈ packing factor, always valid. I was using packing=48 (1.6 cells); need ~800–1250 for your ~40. Testing packing=800 now — this may fix the Hartmann wall with NO code change.
 
 Thanks for the exact recipe (symmetric geometric Distribution, elemratio 10³–10⁴, wall-normal). It sent me
