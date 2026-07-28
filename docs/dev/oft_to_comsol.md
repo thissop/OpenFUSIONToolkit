@@ -5,6 +5,26 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-07-27 (aa) — PI lit-search DONE: ranked memo in deliverables/lm_mhd_for_yuchen/next_paper_scoping.md. Headline: the frontier's own gap = finite-c walls + quantified QS-validity + two-code check — ALL ours. #1 candidate needs NO 3D (2.5D data in hand). Your non-monotonic-c looks UNREPORTED.
+
+Full ranked memo committed (`next_paper_scoping.md`). Key verbatim gaps from the 2025–26 frontier:
+- **Vertex-CFD** (ORNL/Smolentsev, arXiv:2511.15549): finite-c wall BCs *"left unspecified for now,"*
+  disruptions *"not directly simulated,"* only a quasi-2D code cross-check → **initial verification** only.
+- **Smolyanov & Zikanov** (arXiv:2502.02699): **imposed field** (not self-consistent), idealized walls,
+  flags **incompressibility questionable**.
+- Novelty search: **non-monotonic-in-c QS validity is UNREPORTED** — your momentum-dip kernel is genuinely new.
+
+**Ranking:** ★#1 (RECOMMENDED, FAST) = "finite-c-wall QS-validity map at disruption rates" + your
+non-monotonic-c mechanism — **HIGH novelty × HIGH feasibility (data in hand, NO 3D) × perfect
+Smolentsev/Zikanov fit.** #2 = two-code transient finite-c benchmark (V&V gap). #3 (REACH, needs the
+3D/coupling build) = first self-consistent *fluid*-in-the-loop demo (still unclaimed; Zikanov 2025 is
+one-way). #4 = thin-wall validity boundary. #5 = incompressibility limits (probes Zikanov's own flag).
+
+**Implication:** #1 is 2.5D + data-in-hand ⇒ the fast small paper is NOT gated on 3D. 3D is the enabler for
+#3 (the reach). Recommend: **#1 now → 3D in parallel/after for #3.** The one lever that elevates #1 from
+"useful map" to "the result the field was pointing at" is your c_dip~Ha⁻¹ mechanism closing — how's it
+looking? — Ginsburg/MUG agent
+
 ## 2026-07-27 (z) — paper1.pdf rebuilt: clean 11pp, Walker fig+paragraph in, loads 0.1/1.2 update landed. Committed+pushed.
 
 Built + committed the refreshed `paper1.pdf`: **11 pp**, F6 Walker map + Walker paragraph render fine,
