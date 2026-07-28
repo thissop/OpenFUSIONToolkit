@@ -72,6 +72,53 @@ SUBROUTINE hartmann_probe_apply(self,sub_fields,t)
 END SUBROUTINE hartmann_probe_apply
 END MODULE hartmann_probe_mod
 
+!------------------------------------------------------------------------------
+!> Constant field-ramp driver (box-1's disruption Sdrv = dB/dt, constant): adds a
+!> uniform induction source S = Sdrv*zhat to the B residual each step. The source
+!> load b_S = INT(Sdrv*zhat . phi) dV is precomputed (an H(Curl)+Grad(H1) vector);
+!> apply() adds scale*dt*b_S to the B blocks (1=H(Curl), 2=Grad(H1)) of residual v.
+!> Sign/magnitude via `scale` (calibrate: with no flow, B_z must grow at ~Sdrv).
+!------------------------------------------------------------------------------
+MODULE ramp_driver_mod
+USE oft_base
+USE oft_la_base, ONLY: oft_vector
+USE xmhd, ONLY: oft_xmhd_driver
+IMPLICIT NONE
+PRIVATE
+PUBLIC :: ramp_driver
+TYPE, EXTENDS(oft_xmhd_driver) :: ramp_driver
+  CLASS(oft_vector), POINTER :: b_S => NULL()   !< precomputed source load (B-space)
+  REAL(r8) :: scale = 1.d0                        !< calibration factor (sign+magnitude)
+  REAL(r8) :: t_ramp = 0.d0                       !< smooth turn-on time (0 = instant on)
+CONTAINS
+  PROCEDURE :: apply => ramp_driver_apply
+END TYPE ramp_driver
+CONTAINS
+SUBROUTINE ramp_driver_apply(self,up,u,v,t,dt)
+  CLASS(ramp_driver), INTENT(inout) :: self
+  CLASS(oft_vector), INTENT(inout) :: up,u,v
+  REAL(r8), INTENT(in) :: t,dt
+  REAL(r8), POINTER :: svals(:),vvals(:)
+  REAL(r8) :: f
+  INTEGER(i4) :: ib
+  ! smooth cosine turn-on over t_ramp kills the impulsive-on shock (which otherwise
+  ! contaminates the early overshoot at low Ha); f=1 for instant-on (t_ramp<=0)
+  IF(self%t_ramp>0.d0 .AND. t<self%t_ramp)THEN
+    f=0.5d0*(1.d0-COS(3.14159265358979d0*t/self%t_ramp))
+  ELSE
+    f=1.d0
+  END IF
+  DO ib=1,2                                       ! B occupies residual blocks 1,2
+    NULLIFY(svals); NULLIFY(vvals)
+    CALL self%b_S%get_local(svals,iblock=ib)
+    CALL v%get_local(vvals,iblock=ib)
+    vvals = vvals + f*self%scale*dt*svals
+    CALL v%restore_local(vvals,iblock=ib,wait=.TRUE.)
+    DEALLOCATE(svals,vvals)
+  END DO
+END SUBROUTINE ramp_driver_apply
+END MODULE ramp_driver_mod
+
 PROGRAM test_hartmann3d
 USE oft_base
 USE multigrid, ONLY: multigrid_mesh
@@ -97,6 +144,7 @@ USE xmhd, ONLY: xmhd_run, xmhd_plot, xmhd_minlev, xmhd_taxis, g_accel, &
   xmhd_sub_fields, xmhd_ML_hcurl, xmhd_ML_H1, xmhd_ML_hcurl_grad, xmhd_ML_H1grad, &
   xmhd_ML_lagrange, xmhd_ML_vlagrange
 USE hartmann_probe_mod, ONLY: hartmann_probe
+USE ramp_driver_mod, ONLY: ramp_driver
 IMPLICIT NONE
 !---Full H(Curl) space mass-matrix solver
 CLASS(oft_solver), POINTER :: minv => NULL()
@@ -108,6 +156,9 @@ TYPE(uniform_field) :: x_field
 TYPE(multigrid_mesh) :: mg_mesh
 TYPE(oft_hcurl_grad_gzerop), TARGET :: hcurl_grad_gzerop
 TYPE(hartmann_probe) :: probe
+TYPE(ramp_driver) :: driver
+TYPE(uniform_field) :: sdrv_field
+CLASS(oft_vector), POINTER :: b_S => NULL()
 INTEGER(i4) :: io_unit,ierr,i,np,probe_unit
 REAL(r8), POINTER :: vel_vals(:) => NULL()
 !---Runtime options (namelist)
@@ -118,7 +169,11 @@ REAL(r8) :: drive = 1.d0      !< body-force acceleration g_accel (-z axial drive
 REAL(r8) :: n0    = 1.d19     !< number density
 REAL(r8) :: t0    = 1.d0      !< temperature [eV]
 REAL(r8) :: a_half = 0.5d0    !< duct half-width (for the core velocity mask)
-NAMELIST/hartmann3d_options/order,minlev,B0,drive,n0,t0,a_half
+CHARACTER(LEN=8) :: drive_mode = 'force'  !< 'force' = g_accel body force; 'ramp' = Sdrv field-ramp source
+REAL(r8) :: Sdrv  = 0.d0      !< constant induction source dB/dt (z-component), box-1's disruption driver
+REAL(r8) :: sdrv_scale = 1.d0 !< calibration factor for the ramp source (sign+magnitude)
+REAL(r8) :: sdrv_tramp = 0.d0 !< smooth source turn-on time (0 = instant); kills the turn-on shock
+NAMELIST/hartmann3d_options/order,minlev,B0,drive,n0,t0,a_half,drive_mode,Sdrv,sdrv_scale,sdrv_tramp
 !------------------------------------------------------------------------------
 ! Initialize + read options
 !------------------------------------------------------------------------------
@@ -191,9 +246,9 @@ IF(oft_env%head_proc)THEN
   probe%io_unit=probe_unit
 END IF
 !------------------------------------------------------------------------------
-! Axial drive via built-in body force (-z), then run (with probe)
+! Drive: 'force' = uniform body force g_accel(-z); 'ramp' = Sdrv field-ramp source
+! (box-1's disruption). Then run with the driver (ramp) + probe.
 !------------------------------------------------------------------------------
-g_accel=drive
 xmhd_minlev=minlev
 xmhd_taxis=2
 oft_env%pm=.FALSE.
@@ -201,7 +256,20 @@ equil_fields%B=>b
 equil_fields%V=>vel
 equil_fields%Ne=>den
 equil_fields%Ti=>temp
-CALL xmhd_run(equil_fields,probes=probe)
+IF(TRIM(drive_mode)=='ramp')THEN
+  g_accel=0.d0
+  sdrv_field%val=(/0.d0,0.d0,Sdrv/)              ! source load b_S = INT(Sdrv*zhat . phi)
+  CALL xmhd_ML_hcurl_grad%vec_create(b_S)
+  CALL oft_hcurl_grad_project(xmhd_ML_hcurl_grad%current_level,sdrv_field,b_S)
+  CALL hcurl_grad_gzerop%apply(b_S)
+  driver%b_S=>b_S
+  driver%scale=sdrv_scale
+  driver%t_ramp=sdrv_tramp
+  CALL xmhd_run(equil_fields,driver=driver,probes=probe)
+ELSE
+  g_accel=drive
+  CALL xmhd_run(equil_fields,probes=probe)
+END IF
 IF(probe%io_unit/=0) CLOSE(probe%io_unit)
 !------------------------------------------------------------------------------
 ! Dump solution (xmhd_plot) + raw axial-velocity profile (order-1 vertex sample)
