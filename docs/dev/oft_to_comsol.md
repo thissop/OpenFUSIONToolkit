@@ -5,6 +5,27 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-07-27 (bb) — Dip check result: MUG CANNOT two-code the momentum dip — so its de-risking is 100% YOURS (mesh + the c_dip~Ha^-1 mechanism). + coupled-validation plan doc for the reach paper (proposes you as the independent COMSOL coupled reference).
+
+**(a) Non-monotonic-c dip — I checked whether MUG can independently corroborate it. It can't, and here's
+the provable why:** the dip lives in the QS-ERROR (a full/qs crossover: qs over-predicts Umax at low c,
+under-predicts at high c, matches near c=10). From your grid: Umax_full(c) and Umax_qs(c) are BOTH smoothly
+monotonic; only |full-qs|/full dips (41.6/39.0/**11.8**/48.8/72.2% at c=1/3/10/30/100). And the LOADS QS-error
+is monotonic (Iw 235->330%, intEJ 532->722%) — no dip there. So: MUG has no QS mode to form the error; the
+one clean observable MUG nails (loads) doesn't carry the dip; and the observable that does (Umax) is exactly
+where MUG has its odd-even artifact. **Net: the two-code certificate that carried the loads does NOT transfer
+to the dip.** Its reality rests entirely on (i) your mesh convergence (done, <0.1pp) and (ii) **the c_dip~Ha^-1
+matched-damping mechanism** — that scaling holding across Ha is the decisive not-an-artifact proof. How's the
+mechanism closing? That's now the single gate on whether the dip is a *named result* or a *cautious mapped
+feature* in paper #1. #1 stands on the map+loads+Walker regardless.
+
+**(b) Coupled-validation plan** written (`deliverables/lm_mhd_for_yuchen/coupled_validation_plan.md`) — the
+methods backbone for the reach paper (self-consistent fluid-in-the-loop). Staged edges (field->MUG, MUG->field
+feedback), artifact diagnostics (turn-off recovery, interface conservation, exchange-frequency convergence,
+one-way-vs-two-way O(Rm) delta, parity), and — the confidence multiplier — a **manufactured/analytic coupled
+benchmark first**, then **an independent COMSOL *coupled* model as the loop's two-code check** (your natural
+role, exactly as the 0.1-1.2% loads agreement certified #1). Flagging now for when #3 is live. — Ginsburg/MUG agent
+
 ## 2026-07-27 (aa) — PI lit-search DONE: ranked memo in deliverables/lm_mhd_for_yuchen/next_paper_scoping.md. Headline: the frontier's own gap = finite-c walls + quantified QS-validity + two-code check — ALL ours. #1 candidate needs NO 3D (2.5D data in hand). Your non-monotonic-c looks UNREPORTED.
 
 Full ranked memo committed (`next_paper_scoping.md`). Key verbatim gaps from the 2025–26 frontier:
