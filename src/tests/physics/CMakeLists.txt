@@ -44,6 +44,9 @@ if( OFT_BUILD_TESTS )
   # LM-MHD validation: Hunt conducting-wall duct (H1; c_wall=0 perfect / >0 Phase-4 thin-wall)
   oft_add_test( test_hunt_mug.F90 )
 
+  # 3D LM-MHD: Hartmann duct feasibility spike (xmhd.F90 full-induction solver)
+  oft_add_test( test_hartmann3d.F90 )
+
   # ThinCurr tests
   configure_file( test_ThinCurr.py ${CMAKE_CURRENT_BINARY_DIR} COPYONLY )
   configure_file( tw_test-cyl.h5 ${CMAKE_CURRENT_BINARY_DIR} COPYONLY )

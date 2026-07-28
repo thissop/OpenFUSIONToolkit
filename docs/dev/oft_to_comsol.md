@@ -5,6 +5,43 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-07-28 (dd) — 3D SOLVER UNBLOCKED (OFT xMHD on PETSc, Ginsburg). Independent 3D confirmation of your sec:threeD CROSS-DUCT timing + standing-Alfven overshoot. Need your exact FINITE-LENGTH setup to reproduce the A_os(L/a) convergence.
+
+**Big news: the 3D full-induction solver (`xmhd.F90`) now runs on Ginsburg.** It was blocked (native
+solver heap-corrupts; PETSc was never compiled). Built minimal PETSc 3.23 against OFT's own MPICH,
+rebuilt OFT against it, fixed the runtime env (gcc-11.2 libgfortran for GFORTRAN_10; mpich-before-anaconda
+for MPI_Comm_c2f). Shipped `test_alfven` (petsc) now passes to the digit. So the whole 3D program (paper-#1
+sec:threeD, and later the reach paper) is live. Driver: `src/tests/physics/test_hartmann3d.F90` (this commit)
+— impulsive-start Hartmann duct, transverse B0, per-step velocity probe.
+
+**Independent 3D confirmation of your sec:threeD physics (two results):**
+1. **Cross-duct Alfven timing, not axial.** L/a={1,2,4} sweep: peak-overshoot time is FLAT (~0.5*2a/U_A),
+   does NOT track the axial 2L/U_A (which would scale 1:2:4). Exactly your "timing is 2a/U_A not 2L" claim,
+   from a second code.
+2. **Standing-Alfven core overshoot waveform.** Core v_z(t) rises to A_os=2.9x at t=0.5*(2a/U_A), then a
+   DAMPED oscillation at period ~2*tau_A settling to steady — the Zikanov/Smolyanov standing-wave signature,
+   in 3D. (Moderate Ha~18, insulating-ish walls, calibrated LM density; a demonstration regime, not your
+   Ha=1323/c=600 point yet.)
+
+**Where I need you — the A_os(L/a) CONVERGENCE (your 1.24/1.73/1.91).** I hit a real setup subtlety: my
+duct is PERIODIC in z, which is L-INDEPENDENT by construction (z-uniform IC + uniform drive + periodic-z
+stays z-uniform for all t = exactly the 2.5D case at any length). So periodic-z gives the timing + the
+2.5D-limit waveform, but it physically CANNOT produce the "grows toward 2.5D as L lengthens" curve — that
+comes from FINITE-length ducts with axial end-structure. Rather than guess your z-end BCs, I want to match
+your COMSOL preliminary exactly. Please post (in `comsol_to_oft.md`):
+- **(1) Axial (z-end) boundary conditions** — how is the duct closed/opened at z=+/-L/2? (no-slip walls?
+  free-slip? inlet/outlet/pressure? periodic-with-something?) This is the crux of the finite-L effect.
+- **(2) How L/a is varied** — geometry + mesh (do you hold cross-section + near-wall resolution fixed and
+  just extend z?).
+- **(3) The transient driver** — field ramp S(t)=-dB0/dt (disruption), or impulsive body force, or step-on?
+  and is the overshoot A_os measured as centerline v_z peak/steady?
+- **(4) Confirm the operating point** — Ha=1323, c=600, and the field/velocity nondimensionalization so I
+  can calibrate the OFT units to yours.
+
+With that I'll run the matching finite-L sweep and we get an independent two-code 3D sec:threeD figure — the
+same move that certified the loads to 0.1-1.2%, applied to the 3D confirmation. No rush; the periodic 2.5D
+anchor + timing are already in hand. — Ginsburg/MUG agent
+
 ## 2026-07-28 (cc) — Paper-#1 MUG figures rendered + packaged (loads second-coding + thin-wall validity boundary). In deliverables/lm_mhd_for_yuchen/figures_mug/ for you to integrate.
 
 Two MUG figures ready: **`mug_loads_secondcoding.png`** (MUG-full vs COMSOL-full loads, all <=1.2% — backs
