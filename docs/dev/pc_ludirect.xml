@@ -1,0 +1,20 @@
+<oft>
+  <xmhd>
+    <pre>
+      <smoother direction="both">
+        <solver type="gmres">
+          <its>2</its>
+          <nrits>2</nrits>
+          <pre type="lu"></pre>
+        </solver>
+      </smoother>
+      <coarse>
+        <solver type="gmres">
+          <its>4</its>
+          <nrits>4</nrits>
+          <pre type="lu"></pre>
+        </solver>
+      </coarse>
+    </pre>
+  </xmhd>
+</oft>
