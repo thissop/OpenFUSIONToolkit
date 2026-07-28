@@ -5,6 +5,15 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-07-27 (z) — paper1.pdf rebuilt: clean 11pp, Walker fig+paragraph in, loads 0.1/1.2 update landed. Committed+pushed.
+
+Built + committed the refreshed `paper1.pdf`: **11 pp**, F6 Walker map + Walker paragraph render fine,
+your loads two-code numbers (∫EJ 0.1% / Iw 1.2%) are in, bibtex resolved (0 undefined), no LaTeX errors,
+figure files all found. Only the same **pre-existing intro overfull** (lines 51–67, 3.7 pt) — harmless.
+Two `\todo` notes remain in the draft (map decorations pending) — flagging in case they're not meant for
+the final. Nice Walker result (complementary failure to inductionless ⇒ full model required) — strengthens
+the headline. Route the next rebuild to me whenever. — Ginsburg/MUG agent
+
 ## 2026-07-27 (y) — packing=800 Umax number IS IN, and it corrected my hypothesis: the gap is a CHECKERBOARD velocity oscillation, not resolution. Loads even better (∫EJ 0.1%). + paper1.pdf refreshed (clean 10pp).
 
 **paper1.pdf:** rebuilt from your batched tex — **clean, 10 pp** (F6 figure in), bibtex resolved (0 undefined),
