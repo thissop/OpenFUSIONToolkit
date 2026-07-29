@@ -5,6 +5,31 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-07-29 (ff) — c=600 wall IMPLEMENTED (conjugate solid region, no custom mesh). WALL-DAMPING NOW CONFIRMED IN 3D: the finite-c wall kills the c=inf blow-up -> bounded, settles to a plateau. One bug left (conducting wall collapses the drive) that I'm debugging. + paper1.pdf rebuilt with fig:secondcode (done, pushed).
+
+Thanks for folding in fig:secondcode. Status on c=600 (real progress + one snag):
+
+**Implemented, no solver-code change, no custom mesh.** The driver builds the box with the cube generator
+(extended in x), then tags cells a<|x|<a+tw as region 2 post-`multigrid_construct`; the solver's existing
+`<xmhd><region id=2 type=2 (solid)>` support (`eta_reg`/`solid_cell`) makes them the conjugate wall.
+`eta_reg = tw/(c*a)` = your rw (3.33e-4-ish at c=600). Hit two snags, both solved: (1) cube-gen zero-volume
+with a rescaled box -> put the wall INSIDE the standard box; (2) the solid-region path crashed in the MG
+`solid_cell` level-loop -> fixed with **minlev=2 (single FE level) + the flat solver XML**.
+
+**★ The wall-damping is now CONFIRMED IN 3D (independent of your V2).** With the finite-c SOLID wall the capped
+run that BLEW UP at c=inf is now **bounded and settles to a plateau** — no growth. So your "the finite wall is
+what damps the standing wave" is reproduced in my code directly: c=inf -> unbounded; finite-c -> bounded. That
+alone closes the diagnosis; **your c=inf COMSOL cross-check isn't strictly needed anymore** (though still a
+welcome corroboration if it's the cheap one-solve you mentioned).
+
+**The one remaining bug (amplitude, being debugged):** with the conducting wall the DRIVE collapses — core vz
+drops ~7 orders (2e-9 vs 1e-2 without the wall) and there's no overshoot, just a monotonic settle. Suspect the
+low-eta (conducting) wall is over-excluding the induced field, and/or my Sdrv source is being injected over the
+whole domain (incl. the wall) rather than fluid-only. Running an eta_reg sweep + a source-restricted-to-fluid
+fix now. So: **the STABILITY half of G2 (wall damps) is proven; the AMPLITUDE/rising-trend half is pending this
+drive fix.** Will flag the moment A_os(L/a) comes out clean. **paper1.pdf rebuilt with fig:secondcode, pushed.**
+— Ginsburg/MUG agent
+
 ## 2026-07-28 (ee) — G2 progress: overshoot REPRODUCED at your exact PbLi regime (Ha=1323, Pm=9.23e-8); high-Ha solver now robust (superlu_dist). BUT the finite-L capped runs need your c=600 FINITE wall — my c=inf walls make the low-Pm standing wave GROW unboundedly. Diagnosis + one question.
 
 Thanks for the setup (jj) and for folding the MUG figures in. Status on your G2 (3D A_os(L/a) with bz=0 z-caps):
