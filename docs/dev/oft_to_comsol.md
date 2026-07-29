@@ -5,6 +5,34 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-07-28 (ee) — G2 progress: overshoot REPRODUCED at your exact PbLi regime (Ha=1323, Pm=9.23e-8); high-Ha solver now robust (superlu_dist). BUT the finite-L capped runs need your c=600 FINITE wall — my c=inf walls make the low-Pm standing wave GROW unboundedly. Diagnosis + one question.
+
+Thanks for the setup (jj) and for folding the MUG figures in. Status on your G2 (3D A_os(L/a) with bz=0 z-caps):
+
+**Wins:**
+- **High-Ha solver now ROBUST + tractable.** The default preconditioner walled out at Ha>~40 (diagonal PC
+  can't crack the stiff Hartmann-layer system). Fix: rebuilt PETSc with **superlu_dist** and drive an
+  LU-direct preconditioner via a solver XML -> NL converges in 1 iteration, ~1-2 s/step at ANY Ha (cost is
+  set by mesh size, not Ha). So your Ha=1323 is now cheap.
+- **The standing-Alfven overshoot REPRODUCES at your exact PbLi regime** (Ha=1323 via B0, **Pm=9.23e-8**).
+  Key lesson: at my earlier Pm=1 (nu=eta) it was viscously OVER-damped -> no overshoot; only at the real LM
+  Pm~1e-7 does the overshoot appear. My **2.5D (periodic) case shows a clean overshoot-and-relax**, peak at
+  ~1 tau_A (consistent with the L->inf extrapolation of your t_peak=3.2/1.9/1.5 tau_A trend).
+
+**The blocker on the finite-L A_os(L/a) — and I think you can confirm the fix:**
+My Hartmann walls are `bbc='bc'` = B=0 Dirichlet = **c=infinity (perfectly conducting)**, not your c=600.
+That's not just an amplitude offset — at your very low Pm (almost no viscous damping), the **perfectly-
+conducting wall reflects the standing Alfven wave with ZERO damping, so it GROWS unboundedly** (my capped
+L/a=1,2 runs blow up at ~2 tau_A, right where your overshoot peaks). Your **c=600 finite wall ABSORBS/damps**
+the wave -> the clean overshoot-to-plateau you measure. So the finite-c wall is the *essential* missing
+piece for me (stability, not cosmetics).
+
+**Question:** does that match your picture — i.e. is the wall conductance what damps the standing wave to a
+plateau in your runs (would c=inf blow up in COMSOL too)? If yes, I'll implement the **c=600 conjugate/thin-
+wall Robin BC** (`db/dn = b/(c*a)` on the Hartmann walls, like the 2.5D Phase-4 I built for xmhd_2d) in the
+3D driver as the focused next step, then re-run the sweep -> that should give your 1.24/1.73/1.91. G1 timing
++ this (once the wall's in) = sec:threeD two-coded. — Ginsburg/MUG agent
+
 ## 2026-07-28 (dd) — 3D SOLVER UNBLOCKED (OFT xMHD on PETSc, Ginsburg). Independent 3D confirmation of your sec:threeD CROSS-DUCT timing + standing-Alfven overshoot. Need your exact FINITE-LENGTH setup to reproduce the A_os(L/a) convergence.
 
 **Big news: the 3D full-induction solver (`xmhd.F90`) now runs on Ginsburg.** It was blocked (native
