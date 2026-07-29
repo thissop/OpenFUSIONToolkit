@@ -46,3 +46,32 @@ eta(=lambda)=1.137 (SI eta=1.4286e-6 Ohm.m), Ha=2645.7*B0y with **B0y=0.5T => Ha
 tau_A=2a/U_A=0.0437s. Then: LU-direct solver XML + resolved Hartmann layer (high packing) + SHORT runs
 (~2-3 tau_A, first overshoot before instability) + the bz=0-cap L/a={1,2,4} sweep. Box-1 driver =
 constant Sdrv=100 T/s in the induction eq (the `ramp_driver`).
+
+## c=600 finite conjugate wall — SCOPED (2026-07-28), the last piece for box-1's A_os(L/a)
+Why needed: my Hartmann walls are `bbc='bc'` = B=0 Dirichlet = c=INFINITY (perfectly conducting).
+At box-1's very low Pm (9.23e-8, ~no viscous damping) a perfect wall REFLECTS the standing Alfven
+wave with zero damping -> it GROWS unboundedly (capped runs blow up at ~2 tau_A). box-1's c=600
+finite wall ABSORBS/damps it -> the clean overshoot-to-plateau. So the finite-c wall is ESSENTIAL
+for STABILITY, not just amplitude.
+
+**GOOD NEWS: xmhd.F90 already supports resolved conjugate walls — NO solver code change.**
+- `xmhd_setup_regions` reads `<xmhd><region><id>N</id><eta>E</eta><type>T</type></region></xmhd>`
+  from the solver XML (argv[2]). `type=1`=fluid, `type=2`=SOLID WALL. Type-2 cells -> `solid_cell`
+  (momentum off, no flow) with induction resistivity `eta_reg = eta*E` (`eta_curr=eta*eta_reg(mesh%reg(i))`).
+- This IS box-1's model: fluid region + solid Hartmann-wall region with finite resistivity, rw=tw/(c*a).
+
+**The focused work (mesh + config, moderate):**
+1. **Multi-region mesh** (the main piece): a duct box with a FLUID core (|x|<a) + thin SOLID WALL layers
+   (a<|x|<a+tw) at the Hartmann walls (perp to B0), tagged with a distinct mesh region ID. The built-in
+   cube generator (cad_type=92) makes a SINGLE region -> need a custom gmsh/cubit/t3d mesh with subdomains
+   (OFT imports these). Swept 2D cross-section (fine in the field-perp direction for delta_H) extended in z,
+   per box-1's mesh recipe. bz=0 z-caps stay (ref_per=F,F,F).
+2. **eta XML** for the wall region: c = (sigma_w/sigma_f)*(tw/a) = (eta_fluid/eta_wall)*(tw/a). For c=600
+   pick tw/a and set eta_wall = eta_fluid*(tw/a)/600. Wall region type=2.
+3. **Driver**: switch test_hartmann3d from the cube generator to `meshname=<file>` loading the custom mesh
+   (or add a wall-region option). Keep the ramp_driver Sdrv + LU-direct solver XML (they compose — the
+   region block and the pre block both live under <xmhd>).
+4. Re-run periodic + bz=0-cap L/a={1,2,4} -> the finite wall damps the wave -> clean A_os(L/a) -> box-1's
+   1.24/1.73/1.91 (two-code sec:threeD).
+
+Estimated effort: mostly the multi-region mesh generation; the solver + driver + physics are all ready.
