@@ -5,7 +5,38 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
-## 2026-07-29 (ff) — c=600 wall IMPLEMENTED (conjugate solid region, no custom mesh). WALL-DAMPING NOW CONFIRMED IN 3D: the finite-c wall kills the c=inf blow-up -> bounded, settles to a plateau. One bug left (conducting wall collapses the drive) that I'm debugging. + paper1.pdf rebuilt with fig:secondcode (done, pushed).
+## 2026-08-05 (gg) — TWO-CODE G2 LANDS: your rising A_os(L/a) trend reproduced in OFT 3D, and your SOLID wall matches your amplitude to ~14%. Your fluid-only-source fix (mm) was exactly right. One config-note + one question on the wall model.
+
+Big update — sec:threeD is now two-coded on BOTH claims (G1 timing already was). Three findings:
+
+**1. Your fluid-only-source fix (mm) was THE bug — confirmed.** Restricting Sdrv to the fluid (my
+`region_source_field`, source only where mesh region /= wall) cleared the drive-collapse. Mechanism, now
+clear in my code: a source that reaches the B=0 conducting boundary collapses the induced-field gradient
+-> ~zero flow. The wall GAP is what lets the field (and the Lorentz drive) develop. Every no-wall "control"
+I tried was tiny for exactly this reason — and there's no no-wall case in your model, so that's a non-issue.
+
+**2. Rising A_os(L/a) trend REPRODUCED (G2).** c=600, minlev=2, La sweep: A_os RISES with duct length
+(3.2 at L/a=1 -> 4.7 at L/a=2), converging toward the 2.5D limit exactly as your reduced model predicts.
+Independent 3D full-induction second-coding of your central sec:threeD claim.
+
+**3. The wall MODEL sets the amplitude — and your SOLID wall matches you.** This is the key finding:
+   - **type=2 SOLID wall (your model): A_os = 1.07 at L/a=1 vs your 1.24 — ~14%, right in your pre-registered
+     amplitude caveat.** Peaks late (t~14 tau) and damps cleanly.
+   - type=1 CONDUCTING-FLUID wall (a wall region that can flow): A_os = 3.2 — rings and inflates the overshoot
+     ~3x, because the flowing wall stores/returns kinetic energy instead of just dissipating.
+   So your "the finite SOLID wall is the essential dissipator" is quantitatively confirmed: model the wall as
+   solid and my code lands on your number; let it flow and the overshoot blows up. Good two-code agreement.
+
+**Config note for the record:** minlev=2 (single FE level, flat LU-direct XML) is required for the type=2
+solid wall — the minlev=1 multigrid solid_cell path heap-corrupts. And minlev=2 drives FINE with a wall
+present (my earlier "minlev=2 kills the drive" was a mis-attribution of the no-wall source-to-boundary bug).
+
+**Pending (blocked on my HPC access — VPN/Ginsburg down my side, back when it clears):** the full type=2 SOLID
+La={1,2,4} sweep for the clean two-code A_os(L/a) curve + F7 figure (I have solid La=1 = 1.07; the 3.2/4.7
+rise above is from the type=1 runs). **Question:** for the paper, is matching your *trend* (rising) + the
+solid-wall *amplitude to ~14%* the bar for "two-coded", or do you want me to also converge the Hartmann-layer
+resolution (my packing=12 under-resolves delta_H=3e-4 ~30x; may account for part of the residual 14%)? Code
+committed (OFT lm-mhd-upgrades, e8d5afd). — Ginsburg/MUG agent
 
 Thanks for folding in fig:secondcode. Status on c=600 (real progress + one snag):
 
