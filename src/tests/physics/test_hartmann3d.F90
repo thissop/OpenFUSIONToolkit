@@ -15,7 +15,7 @@
 !------------------------------------------------------------------------------
 
 !------------------------------------------------------------------------------
-!> Per-step probe: extract core-masked max|v_z| (|x|<0.5*a_half) and the
+!> Per-step probe: extract fluid-core max|v_z| (|x|<a_half, i.e. excludes the
 !> centerline v_z (node nearest the x=y=0 axis) from the live velocity field.
 !------------------------------------------------------------------------------
 MODULE hartmann_probe_mod
@@ -30,7 +30,7 @@ TYPE, EXTENDS(oft_xmhd_probe) :: hartmann_probe
   REAL(r8), POINTER :: vvals(:) => NULL()   !< reused get_local buffer
   INTEGER(i4) :: np = 0                      !< number of mesh vertices
   INTEGER(i4) :: io_unit = 0                 !< open unit (NEWUNIT is negative; 0 = inactive)
-  REAL(r8) :: a_half = 0.5d0                 !< duct half-width (core mask |x|<0.5*a_half)
+  REAL(r8) :: a_half = 0.5d0                 !< fluid half-width (probe samples |x|<a_half)
 CONTAINS
   PROCEDURE :: apply => hartmann_probe_apply
 END TYPE hartmann_probe
@@ -51,7 +51,7 @@ SUBROUTINE hartmann_probe_apply(self,sub_fields,t)
     CALL sub_fields%V%get_local(self%vvals,ib)   ! reuses buffer after 1st alloc
     nn=MIN(self%np,SIZE(self%vvals))
     DO i=1,nn
-      IF(ABS(self%r(1,i)) < 0.5d0*self%a_half)THEN
+      IF(ABS(self%r(1,i)) < self%a_half)THEN
         IF(ABS(self%vvals(i))>cmax(ib)) cmax(ib)=ABS(self%vvals(i))
       END IF
     END DO
@@ -119,6 +119,38 @@ SUBROUTINE ramp_driver_apply(self,up,u,v,t,dt)
 END SUBROUTINE ramp_driver_apply
 END MODULE ramp_driver_mod
 
+!------------------------------------------------------------------------------
+!> Region-aware disruption source: S = Sdrv*zhat in the FLUID, zero in the
+!> conjugate wall (region 2). Projecting THIS (instead of a uniform field) makes
+!> the source load b_S fluid-only, so the wall is driven purely by conjugate
+!> diffusion of the induced field (box-1's reference model). Reduces to the
+!> whole-domain uniform source when no wall is tagged (all cells /= region 2).
+!------------------------------------------------------------------------------
+MODULE region_source_mod
+USE oft_base
+USE fem_utils, ONLY: fem_interp
+IMPLICIT NONE
+PRIVATE
+PUBLIC :: region_source_field
+TYPE, EXTENDS(fem_interp) :: region_source_field
+  INTEGER(i4) :: n = 3                                  !< component count
+  REAL(r8) :: sval = 0.d0                               !< Sdrv (axial source amplitude)
+  INTEGER(i4), POINTER, DIMENSION(:) :: reg => NULL()   !< => mesh%reg (per-cell region id)
+CONTAINS
+  PROCEDURE :: interp => region_source_interp
+END TYPE region_source_field
+CONTAINS
+SUBROUTINE region_source_interp(self,cell,f,gop,val)
+  CLASS(region_source_field), INTENT(inout) :: self
+  INTEGER(i4), INTENT(in) :: cell
+  REAL(r8), INTENT(in) :: f(:)
+  REAL(r8), INTENT(in) :: gop(3,4)
+  REAL(r8), INTENT(out) :: val(:)
+  val=0.d0
+  IF(self%reg(cell) /= 2) val(3)=self%sval   ! fluid (any non-wall region) gets the source
+END SUBROUTINE region_source_interp
+END MODULE region_source_mod
+
 PROGRAM test_hartmann3d
 USE oft_base
 USE multigrid, ONLY: multigrid_mesh
@@ -145,6 +177,7 @@ USE xmhd, ONLY: xmhd_run, xmhd_plot, xmhd_minlev, xmhd_taxis, g_accel, &
   xmhd_ML_lagrange, xmhd_ML_vlagrange
 USE hartmann_probe_mod, ONLY: hartmann_probe
 USE ramp_driver_mod, ONLY: ramp_driver
+USE region_source_mod, ONLY: region_source_field
 IMPLICIT NONE
 !---Full H(Curl) space mass-matrix solver
 CLASS(oft_solver), POINTER :: minv => NULL()
@@ -158,8 +191,10 @@ TYPE(oft_hcurl_grad_gzerop), TARGET :: hcurl_grad_gzerop
 TYPE(hartmann_probe) :: probe
 TYPE(ramp_driver) :: driver
 TYPE(uniform_field) :: sdrv_field
+TYPE(region_source_field) :: sdrv_rfield
 CLASS(oft_vector), POINTER :: b_S => NULL()
-INTEGER(i4) :: io_unit,ierr,i,np,probe_unit
+INTEGER(i4) :: io_unit,ierr,i,j,np,probe_unit
+REAL(r8) :: cx
 REAL(r8), POINTER :: vel_vals(:) => NULL()
 !---Runtime options (namelist)
 INTEGER(i4) :: order  = 2
@@ -173,7 +208,8 @@ CHARACTER(LEN=8) :: drive_mode = 'force'  !< 'force' = g_accel body force; 'ramp
 REAL(r8) :: Sdrv  = 0.d0      !< constant induction source dB/dt (z-component), box-1's disruption driver
 REAL(r8) :: sdrv_scale = 1.d0 !< calibration factor for the ramp source (sign+magnitude)
 REAL(r8) :: sdrv_tramp = 0.d0 !< smooth source turn-on time (0 = instant); kills the turn-on shock
-NAMELIST/hartmann3d_options/order,minlev,B0,drive,n0,t0,a_half,drive_mode,Sdrv,sdrv_scale,sdrv_tramp
+REAL(r8) :: wall_tw = 0.d0    !< conjugate Hartmann-wall thickness (a_half<|x|<a_half+wall_tw -> region 2); 0 = no wall
+NAMELIST/hartmann3d_options/order,minlev,B0,drive,n0,t0,a_half,drive_mode,Sdrv,sdrv_scale,sdrv_tramp,wall_tw
 !------------------------------------------------------------------------------
 ! Initialize + read options
 !------------------------------------------------------------------------------
@@ -185,6 +221,25 @@ CLOSE(io_unit)
 ! Grid (duct box from &cube_options: walled in x,y; periodic in z)
 !------------------------------------------------------------------------------
 CALL multigrid_construct(mg_mesh)
+!------------------------------------------------------------------------------
+! Conjugate wall (finite-c): tag Hartmann-wall cells a_half<|x|<a_half+wall_tw as
+! region 2. The solver's <xmhd><region id=2 type=2 (solid)> block then makes them a
+! solid wall (no flow) with finite resistivity eta_reg -> c=(1/eta_reg)*(tw/a).
+! The box must extend to +/-(a_half+wall_tw) in x (set via &cube_options rscale/shift).
+!------------------------------------------------------------------------------
+IF(wall_tw > 0.d0)THEN
+  DO i=1,mg_mesh%mesh%nc
+    cx=0.d0
+    DO j=1,SIZE(mg_mesh%mesh%lc,1)
+      cx=cx+mg_mesh%mesh%r(1,mg_mesh%mesh%lc(j,i))
+    END DO
+    cx=cx/REAL(SIZE(mg_mesh%mesh%lc,1),8)
+    IF(ABS(cx) > a_half .AND. ABS(cx) < a_half+wall_tw+1.d-9) mg_mesh%mesh%reg(i)=2
+  END DO
+  mg_mesh%mesh%nreg=MAX(mg_mesh%mesh%nreg,2)
+  IF(oft_env%head_proc)WRITE(*,'(A,I0,A,I0,A)') 'Conjugate wall: ', &
+    COUNT(mg_mesh%mesh%reg==2),' of ',mg_mesh%mesh%nc,' cells -> region 2 (solid wall)'
+END IF
 !------------------------------------------------------------------------------
 ! FE structures (mirrors test_alfven)
 !------------------------------------------------------------------------------
@@ -258,9 +313,13 @@ equil_fields%Ne=>den
 equil_fields%Ti=>temp
 IF(TRIM(drive_mode)=='ramp')THEN
   g_accel=0.d0
-  sdrv_field%val=(/0.d0,0.d0,Sdrv/)              ! source load b_S = INT(Sdrv*zhat . phi)
+  ! Fluid-only disruption source b_S = INT(Sdrv*zhat . phi) over region 1 (fluid);
+  ! the conjugate wall (region 2) carries no source, driven only by field diffusion
+  ! (box-1's reference). Reduces to a whole-domain source when no wall is tagged.
+  sdrv_rfield%sval=Sdrv
+  sdrv_rfield%reg=>mg_mesh%mesh%reg
   CALL xmhd_ML_hcurl_grad%vec_create(b_S)
-  CALL oft_hcurl_grad_project(xmhd_ML_hcurl_grad%current_level,sdrv_field,b_S)
+  CALL oft_hcurl_grad_project(xmhd_ML_hcurl_grad%current_level,sdrv_rfield,b_S)
   CALL hcurl_grad_gzerop%apply(b_S)
   driver%b_S=>b_S
   driver%scale=sdrv_scale
