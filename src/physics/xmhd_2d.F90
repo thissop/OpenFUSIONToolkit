@@ -99,6 +99,18 @@ TYPE, public :: oft_xmhd_2d_sim
   LOGICAL :: use_wall_drag = .FALSE. !< Enable reduced wall/Hartmann drag source term
   REAL(r8) :: drag_coeff = 0.d0 !< Drag coefficient alpha [1/time in problem units]
   REAL(r8) :: drag_bhat(3) = [0.d0,1.d0,0.d0] !< Unit vector along applied-field direction; drag is NOT applied along this direction
+  !--- Effective-drag CLOSURE selector. With drag_closure /= 'raw', drag_coeff is
+  !    computed from the correct geometry/conductance-aware Hartmann-layer closure
+  !    alpha_eff = (nu/a^2) * f(Ha,c) (a = a_half). The naive 1-D Hartmann-CHANNEL
+  !    closure f = Ha^2 OVER-BRAKES a rectangular duct by a factor ~Ha (it misses
+  !    the Shercliff side-layer current return); use 'duct_*' for ducts/blankets.
+  !    'raw'            : use drag_coeff as supplied (backward compatible)
+  !    'channel'        : f = Ha^2                 (1-D Hartmann channel; core ~ Ha^-2)
+  !    'duct_insulating': f = Ha                   (rectangular duct, insulating walls; core ~ Ha^-1)
+  !    'duct_conducting': f = Ha^2 / (1 + 1/c)     (conducting Hunt duct; core ~ (1+1/c)/Ha^2)
+  CHARACTER(LEN=16) :: drag_closure = 'raw' !< Hartmann-drag closure: raw|channel|duct_insulating|duct_conducting
+  REAL(r8) :: drag_Ha = 0.d0 !< Hartmann number for the drag closure (drag_closure /= 'raw')
+  REAL(r8) :: drag_c  = -1.d0 !< wall conductance ratio c for 'duct_conducting' closure
   !--- Uniform body-force (per unit mass) momentum source, default off.
   !    Used to drive fully-developed channel/duct flow (e.g. Hartmann verification).
   !    Adds S_u = body_force to the momentum equation (acceleration units, like the
@@ -215,6 +227,27 @@ IF(self%use_wall_drag)THEN
       'run_simulation',__FILE__)
   END IF
   self%drag_bhat=self%drag_bhat/NORM2(self%drag_bhat)
+  !--- Resolve drag_coeff from the geometry/conductance-aware Hartmann-layer closure
+  !    (see drag_closure above). alpha_eff = (nu/a^2)*f(Ha,c); 'raw' leaves the
+  !    user-supplied drag_coeff untouched. The 'channel' closure over-brakes a duct
+  !    by ~Ha and is provided only for reference; use 'duct_*' for ducts/blankets.
+  IF(TRIM(self%drag_closure)/='raw' .AND. (self%nu<=0.d0 .OR. self%a_half<=0.d0)) &
+    CALL oft_abort('drag_closure /= raw needs nu>0 and a_half>0','run_simulation',__FILE__)
+  SELECT CASE (TRIM(self%drag_closure))
+  CASE ('raw')
+    ! keep the user-supplied drag_coeff
+  CASE ('channel')
+    self%drag_coeff = (self%nu/self%a_half**2)*self%drag_Ha**2
+  CASE ('duct_insulating')
+    self%drag_coeff = (self%nu/self%a_half**2)*self%drag_Ha
+  CASE ('duct_conducting')
+    IF(self%drag_c<=0.d0) CALL oft_abort( &
+      "drag_closure='duct_conducting' requires drag_c>0",'run_simulation',__FILE__)
+    self%drag_coeff = (self%nu/self%a_half**2)*self%drag_Ha**2/(1.d0+1.d0/self%drag_c)
+  CASE DEFAULT
+    CALL oft_abort("unknown drag_closure (raw|channel|duct_insulating|duct_conducting)", &
+      'run_simulation',__FILE__)
+  END SELECT
 END IF
 !---------------------------------------------------------------------------
 ! Create solver fields
@@ -467,6 +500,27 @@ IF(self%use_wall_drag)THEN
       'run_simulation',__FILE__)
   END IF
   self%drag_bhat=self%drag_bhat/NORM2(self%drag_bhat)
+  !--- Resolve drag_coeff from the geometry/conductance-aware Hartmann-layer closure
+  !    (see drag_closure above). alpha_eff = (nu/a^2)*f(Ha,c); 'raw' leaves the
+  !    user-supplied drag_coeff untouched. The 'channel' closure over-brakes a duct
+  !    by ~Ha and is provided only for reference; use 'duct_*' for ducts/blankets.
+  IF(TRIM(self%drag_closure)/='raw' .AND. (self%nu<=0.d0 .OR. self%a_half<=0.d0)) &
+    CALL oft_abort('drag_closure /= raw needs nu>0 and a_half>0','run_simulation',__FILE__)
+  SELECT CASE (TRIM(self%drag_closure))
+  CASE ('raw')
+    ! keep the user-supplied drag_coeff
+  CASE ('channel')
+    self%drag_coeff = (self%nu/self%a_half**2)*self%drag_Ha**2
+  CASE ('duct_insulating')
+    self%drag_coeff = (self%nu/self%a_half**2)*self%drag_Ha
+  CASE ('duct_conducting')
+    IF(self%drag_c<=0.d0) CALL oft_abort( &
+      "drag_closure='duct_conducting' requires drag_c>0",'run_simulation',__FILE__)
+    self%drag_coeff = (self%nu/self%a_half**2)*self%drag_Ha**2/(1.d0+1.d0/self%drag_c)
+  CASE DEFAULT
+    CALL oft_abort("unknown drag_closure (raw|channel|duct_insulating|duct_conducting)", &
+      'run_simulation',__FILE__)
+  END SELECT
 END IF
 !---------------------------------------------------------------------------
 ! Create solver fields
