@@ -37,15 +37,31 @@ layer (that is what "wall-function" means, and what Guizzo needs).
   validation is already analytic-exact for insulating.
 
 ## Runner-up gaps (Guizzo future-work we don't yet have)
-### R1. Non-reflecting / convective outflow BC (xmhd_2d) — needed for open/separated geometries
-- Paper-2 flagged this as the missing piece for sudden-expansion / backward-facing-step manifolds.
-  Guizzo also implies open-geometry extensions. Current BCs are Dirichlet/no-slip; an open outlet
-  reflects.
-- **Plan:** implement a convective (Sommerfeld-type) outflow BC `dt(phi)+U_n dn(phi)=0` on a tagged
-  outlet boundary for velocity (and a zero-gradient / do-nothing for pressure), selectable per
-  boundary like the Robin BC. Validate on a channel with an open outlet (steady Poiseuille passes
-  through cleanly) then the backward-facing step (recirculation length vs Re, Armaly benchmark).
-- Scope: moderate (a boundary-integral term + a tagged-outlet mask). Local code; Ginsburg validate.
+### R1. Open / non-reflecting outflow BC — needed for open/separated geometries
+- Paper-2 flagged this for sudden-expansion / backward-facing-step manifolds. Current duct BCs are
+  no-slip on ALL walls (`setup_bc` defaults every velocity mask to `oft_blagrange%global%gbe`).
+- **KEY FINDING (scoped this session):** the first-cut open outflow needs NO change to `xmhd_2d.F90`.
+  `setup_bc` only defaults an UNassociated mask to `gbe`; a driver that allocates its own
+  `velx_bc/vely_bc/velz_bc` and sets them `.FALSE.` on the outlet nodes (`.TRUE.` elsewhere) leaves
+  the outlet velocity FREE — the momentum weak form's natural condition (zero viscous traction,
+  `d(u)/dn=0`) then applies there. This is the standard "do-nothing" outflow and is adequate for
+  steady / mildly-unsteady separated flow. Same override pattern the hunt driver already uses for
+  `by_bc`. => R1 first cut is a NEW DRIVER + mesh, not shared-physics surgery (cannot break flagship).
+- **Plan:**
+  1. New driver `test_bfs_mug` (backward-facing step) or reuse a rectangular mesh with an inlet
+     Poiseuille profile (Dirichlet inlet), no-slip walls, and a FREE outlet mask. Drive with a fixed
+     inlet, not a body force.
+  2. Validate: primary-bubble reattachment length x1/S vs Re against Armaly et al. 1983 (expansion
+     ratio 1.94). Use the 2D-clean range only: Re=100 -> x1/S ~= 3.0, Re=200 -> ~5.4, Re=389 -> ~8.
+     (Above Re~400 the flow is 3D and 2D under-predicts x1 -- do not validate a 2D code there.)
+     Confirm the outlet passes the exiting shear layer with no spurious upstream reflection (steady,
+     monotone convergence to the benchmark).
+- **Refinement (only if the natural BC reflects):** an explicit convective/Sommerfeld update on the
+  outlet nodes, `u^{n+1}|_out = u^n|_out - dt * U_n * (du/dn)^n` (advect the boundary value out; `U_n`
+  = mean outlet normal speed). Implementable as a per-step Dirichlet value set from the adjacent
+  interior gradient — still no weak-form surgery. Add behind an `outflow_convective` flag, default off.
+- Scope: driver + meshing + validation (local authorship; Ginsburg compile/run). NO physics-module
+  edit for the first cut — this is the safe path.
 
 ### R2. Segmented / channelized blanket geometry
 - Guizzo: "practical blankets will be segmented into multiple poloidal channels separated by
