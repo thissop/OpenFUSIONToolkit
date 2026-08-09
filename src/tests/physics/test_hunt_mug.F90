@@ -58,9 +58,15 @@ REAL(r8) :: by_source_dB   = 0.d0    !< total field change dB of the ramp (0 => 
 REAL(r8) :: by_source_tauq = 0.d0    !< ramp duration tau_q (0 => off)
 LOGICAL :: use_ilu = .FALSE.         !< use native ILU(0) preconditioner (for stiff high-Ha long-window solves)
 INTEGER(i4) :: pre_freq = 1          !< update Jacobian+preconditioner every pre_freq steps (>1 amortizes ILU refactor)
+!---Optional Hartmann wall-drag closure (coarse-mesh wall-function validation)
+LOGICAL :: use_wall_drag       = .FALSE. !< turn the drag term on (else resolved-Hartmann run)
+CHARACTER(LEN=16) :: drag_closure = 'raw' !< raw|channel|duct_insulating|duct_conducting
+REAL(r8) :: drag_Ha            = 0.d0    !< Ha for the closure; <=0 => use predicted Ha
+REAL(r8) :: drag_c             = -1.d0   !< c for duct_conducting; <=0 => use c_wall
 NAMELIST/hunt_options/ order, nsteps, rst_freq, ittarget, dt, a_half, B0, eta, &
   nu, fy, n0, t0, chi, D_diff, gamma, den_scale, lin_tol, nl_tol, c_wall, &
-  restart_file, rst_base, pm, by_source_dB, by_source_tauq, use_ilu, pre_freq
+  restart_file, rst_base, pm, by_source_dB, by_source_tauq, use_ilu, pre_freq, &
+  use_wall_drag, drag_closure, drag_Ha, drag_c
 
 TYPE(oft_xmhd_2d_sim) :: mhd_sim
 TYPE(multigrid_mesh) :: mg_mesh
@@ -99,11 +105,25 @@ mhd_sim%body_force = [0.d0, fy, 0.d0]   ! axial (out-of-plane) drive (fy=0 for p
 mhd_sim%use_by_source  = (by_source_tauq > 0.d0)
 mhd_sim%by_source_dB   = by_source_dB
 mhd_sim%by_source_tauq = by_source_tauq
-! drag stays OFF (default use_wall_drag=.FALSE.)
 
 rho = proton_mass * n0 * den_scale
 Ha_pred = B0 * a_half / SQRT(mu0 * eta * rho * nu)
 IF(oft_env%head_proc) WRITE(*,'(A,ES12.4)') 'Predicted Ha = ', Ha_pred
+
+!---Optional Hartmann wall-drag closure. OFF => resolved-Hartmann duct (the
+!   validation reference). ON with a coarse (Hartmann-unresolved) mesh => the
+!   drag term acts as a wall-function; the core velocity should recover the
+!   resolved (1+1/c)/Ha^2 (conducting Hunt) without resolving the layer.
+mhd_sim%use_wall_drag = use_wall_drag
+IF(use_wall_drag) THEN
+  mhd_sim%drag_bhat    = [1.d0, 0.d0, 0.d0]   ! perp = the axial (out-of-plane) flow it brakes
+  mhd_sim%drag_closure = drag_closure
+  mhd_sim%drag_Ha      = MERGE(drag_Ha, Ha_pred, drag_Ha > 0.d0)
+  mhd_sim%drag_c       = MERGE(drag_c, c_wall, drag_c > 0.d0)
+  mhd_sim%a_half       = a_half
+  IF(oft_env%head_proc) WRITE(*,'(A,A,A,ES12.4,A,ES12.4)') 'Wall-drag closure = ', &
+    TRIM(drag_closure), ', drag_Ha = ', mhd_sim%drag_Ha, ', drag_c = ', mhd_sim%drag_c
+END IF
 
 !---Boundary conditions
 ! n, T frozen everywhere (incompressible, no pressure force):

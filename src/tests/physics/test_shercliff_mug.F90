@@ -62,8 +62,14 @@ REAL(r8) :: den_scale   = 1.d0       !< set so rho = m_i*n0*den_scale is as inte
 REAL(r8) :: lin_tol     = 1.d-9
 REAL(r8) :: nl_tol      = 1.d-7
 LOGICAL :: pm = .FALSE.
+!---Optional Hartmann wall-drag closure (coarse-mesh wall-function validation)
+LOGICAL :: use_wall_drag       = .FALSE. !< turn the drag term on (else resolved-Hartmann run)
+CHARACTER(LEN=16) :: drag_closure = 'raw' !< raw|channel|duct_insulating|duct_conducting
+REAL(r8) :: drag_Ha            = 0.d0    !< Ha for the closure; <=0 => use predicted Ha
+REAL(r8) :: drag_c             = -1.d0   !< wall conductance ratio c (duct_conducting only)
 NAMELIST/shercliff_options/ order, nsteps, rst_freq, ittarget, dt, a_half, B0, eta, &
-  nu, fy, n0, t0, chi, D_diff, gamma, den_scale, lin_tol, nl_tol, pm
+  nu, fy, n0, t0, chi, D_diff, gamma, den_scale, lin_tol, nl_tol, pm, &
+  use_wall_drag, drag_closure, drag_Ha, drag_c
 
 TYPE(oft_xmhd_2d_sim) :: mhd_sim
 TYPE(multigrid_mesh) :: mg_mesh
@@ -96,11 +102,25 @@ mhd_sim%mfnk      = .FALSE.
 mhd_sim%B_0       = [0.d0, 0.d0, B0]    ! Hartmann direction (in-plane z)
 mhd_sim%use_body_force = .TRUE.
 mhd_sim%body_force = [0.d0, fy, 0.d0]   ! axial (out-of-plane) drive
-! drag stays OFF (default use_wall_drag=.FALSE.)
 
 rho = proton_mass * n0 * den_scale
 Ha_pred = B0 * a_half / SQRT(mu0 * eta * rho * nu)
 IF(oft_env%head_proc) WRITE(*,'(A,ES12.4)') 'Predicted Ha = ', Ha_pred
+
+!---Optional Hartmann wall-drag closure. OFF => resolved-Hartmann duct (the
+!   validation reference). ON with a coarse (Hartmann-unresolved) mesh => the
+!   drag term acts as a wall-function; the core velocity should recover the
+!   resolved 1/Ha (insulating) / (1+1/c)/Ha^2 (conducting) without the layer.
+mhd_sim%use_wall_drag = use_wall_drag
+IF(use_wall_drag) THEN
+  mhd_sim%drag_bhat    = [1.d0, 0.d0, 0.d0]   ! perp = the axial (out-of-plane) flow it brakes
+  mhd_sim%drag_closure = drag_closure
+  mhd_sim%drag_Ha      = MERGE(drag_Ha, Ha_pred, drag_Ha > 0.d0)
+  mhd_sim%drag_c       = drag_c
+  mhd_sim%a_half       = a_half
+  IF(oft_env%head_proc) WRITE(*,'(A,A,A,ES12.4)') 'Wall-drag closure = ', &
+    TRIM(drag_closure), ', drag_Ha = ', mhd_sim%drag_Ha
+END IF
 
 !---Boundary conditions
 ! n, T frozen everywhere (incompressible, no pressure force):
