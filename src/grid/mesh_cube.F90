@@ -390,10 +390,13 @@ subroutine smesh_square_load(mg_mesh)
 type(multigrid_mesh), intent(inout) :: mg_mesh
 INTEGER(i4) :: i,j,k,ierr,io_unit,nptmp,nctmp,mesh_type,ni(3)
 INTEGER(i4), ALLOCATABLE :: pmap(:,:),lctmp(:,:)
-REAL(r8) :: rscale(3),shift(3),packing(3),alpha,beta,xtmp,ytmp
+REAL(r8) :: rscale(3),shift(3),packing(3),alpha,beta,xtmp,ytmp,septum_lo,septum_hi,xc
 REAL(r8), ALLOCATABLE :: rtmp(:,:)
 class(oft_bmesh), pointer :: smesh
-namelist/cube_options/mesh_type,ni,rscale,shift,ref_per,packing
+!--- Segmented multi-channel option (LM-MHD): cells with center-x in [septum_lo,septum_hi] are
+!    tagged region 2 (structural septum), x>septum_hi region 3, else region 1. Default
+!    septum_lo>septum_hi => disabled => single region 1 (mesh byte-identical to before).
+namelist/cube_options/mesh_type,ni,rscale,shift,ref_per,packing,septum_lo,septum_hi
 DEBUG_STACK_PUSH
 mesh_type=1
 ni=1
@@ -401,6 +404,7 @@ rscale=1.d0
 shift=0.d0
 ref_per=.FALSE.
 packing=1.d0
+septum_lo=1.d0; septum_hi=-1.d0   ! lo>hi => single-region (default, unchanged behaviour)
 IF(oft_env%head_proc)THEN
   OPEN(NEWUNIT=io_unit,FILE=oft_env%ifile)
   READ(io_unit,cube_options,IOSTAT=ierr)
@@ -502,6 +506,17 @@ IF(mesh_type==1)THEN
       smesh%lc(:,(i-1)*4+3)=[lctmp(3,i),lctmp(4,i),nptmp+i]
       smesh%lc(:,(i-1)*4+4)=[lctmp(4,i),lctmp(1,i),nptmp+i]
     END DO
+    !---Segmented multi-channel region tags (default off): quad-cell center-x = smesh%r(1,nptmp+i)
+    IF(septum_lo<=septum_hi)THEN
+      DO i=1,nctmp
+        xc=smesh%r(1,nptmp+i)
+        IF(xc>=septum_lo.AND.xc<=septum_hi)THEN
+          smesh%reg((i-1)*4+1:(i-1)*4+4)=2      ! structural septum
+        ELSE IF(xc>septum_hi)THEN
+          smesh%reg((i-1)*4+1:(i-1)*4+4)=3      ! right channel
+        END IF                                  ! else region 1 (left channel)
+      END DO
+    END IF
   END IF
 ELSE
   IF(oft_env%rank==0)THEN
@@ -519,6 +534,17 @@ ELSE
     DO i=1,nctmp
       smesh%lc(:,i)=lctmp(:,i)
     END DO
+    !---Segmented multi-channel region tags (default off): quad-cell center-x = mean of nodes
+    IF(septum_lo<=septum_hi)THEN
+      DO i=1,nctmp
+        xc=0.25d0*SUM(smesh%r(1,smesh%lc(:,i)))
+        IF(xc>=septum_lo.AND.xc<=septum_hi)THEN
+          smesh%reg(i)=2
+        ELSE IF(xc>septum_hi)THEN
+          smesh%reg(i)=3
+        END IF
+      END DO
+    END IF
   END IF
 END IF
 IF(oft_env%rank==0)DEALLOCATE(rtmp,lctmp)
