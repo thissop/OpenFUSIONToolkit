@@ -137,6 +137,13 @@ TYPE, public :: oft_xmhd_2d_sim
   !    analogous psi Robin term (in-plane conjugate cases) is future work.
   REAL(r8) :: c_wall = 0.d0 !< Wall-conductance ratio for thin-wall Robin by BC (0 = off)
   REAL(r8) :: a_half = 1.d0 !< duct half-width (for thin-wall wall-Joule observable EJw; set by driver)
+  !--- Segmented multi-channel / conjugate-wall region materials (LM-MHD, default off). eta_reg scales
+  !    resistivity per mesh region (eta_curr = eta*eta_reg(mesh%reg)); solid_reg flags structural septa
+  !    (velocity pinned to 0). Unassociated => single-region path, Shercliff/Hunt runs bit-identical.
+  REAL(r8), CONTIGUOUS, POINTER, DIMENSION(:) :: eta_reg => NULL() !< per-region resistivity scale (default 1)
+  LOGICAL,  CONTIGUOUS, POINTER, DIMENSION(:) :: solid_reg => NULL() !< per-region solid/structural-wall flag
+  LOGICAL,  ALLOCATABLE, DIMENSION(:) :: solid_cell !< per-cell solid flag (built from solid_reg via mesh%reg)
+  LOGICAL,  ALLOCATABLE, DIMENSION(:) :: solid_node !< per-node solid flag (any incident solid cell)
   LOGICAL :: use_ilu = .FALSE. !< use native ILU(0) preconditioner instead of diagonal (for stiff high-Ha solves)
   LOGICAL, CONTIGUOUS, POINTER, DIMENSION(:) :: n_bc => NULL() !< n BC flag
   LOGICAL, CONTIGUOUS, POINTER, DIMENSION(:) :: velx_bc => NULL() !< vel BC flag
@@ -947,11 +954,12 @@ INTEGER(i4), ALLOCATABLE, DIMENSION(:) :: cell_dofs
 REAL(r8) :: n,vel(3),T,psi,by,dT(3),dn(3),dpsi(3),dby(3)
 REAL(r8) :: dvel(3,3),div_vel,jac_mat(3,4),jac_det,int_factor,btmp(3),tmp1(3),coords(3)
 REAL(r8) :: vdotb_drag !< projection of velocity onto drag_bhat (for wall drag)
+REAL(r8) :: eta_curr    !< region-aware resistivity eta*eta_reg(mesh%reg(i)) (multi-channel conjugate wall)
 REAL(r8), ALLOCATABLE, DIMENSION(:) :: basis_vals,T_weights_loc,n_weights_loc,psi_weights_loc,by_weights_loc
 REAL(r8), ALLOCATABLE, DIMENSION(:,:) :: vel_weights_loc,basis_grads,res_loc
 !$omp parallel private(k,m,jr,curved,coords,cell_dofs,basis_vals,basis_grads,T_weights_loc, &
 !$omp n_weights_loc,psi_weights_loc, by_weights_loc,vel_weights_loc,res_loc,jac_mat, &
-!$omp jac_det,int_factor,T,n,psi,by,vel,dT,dn,dpsi,dby,dvel,div_vel,btmp,tmp1,vdotb_drag) reduction(+:diag_vals,obs_vals)
+!$omp jac_det,int_factor,T,n,psi,by,vel,dT,dn,dpsi,dby,dvel,div_vel,btmp,tmp1,vdotb_drag,eta_curr) reduction(+:diag_vals,obs_vals)
 ALLOCATE(basis_vals(oft_blagrange%nce),basis_grads(3,oft_blagrange%nce))
 ALLOCATE(T_weights_loc(oft_blagrange%nce),n_weights_loc(oft_blagrange%nce),&
         psi_weights_loc(oft_blagrange%nce), by_weights_loc(oft_blagrange%nce),&
@@ -1133,6 +1141,9 @@ DO i=1,mesh%nc
           + self%dt*chi*DOT_PRODUCT(dT, basis_grads(:,jr))*int_factor &
           - self%dt*chi*basis_vals(jr)*DOT_PRODUCT(dn, dT)*int_factor/n 
       END IF
+      !---Region-aware resistivity for conjugate multi-channel walls (eta_reg unset => eta_curr==eta)
+      eta_curr = eta
+      IF(ASSOCIATED(self%parent_sim%eta_reg)) eta_curr = eta*self%parent_sim%eta_reg(mesh%reg(i))
       !---Psi
       tmp1 = cross_product(B_0,vel)
       IF(cyl_flag) THEN
@@ -1140,13 +1151,13 @@ DO i=1,mesh%nc
         + basis_vals(jr)*psi*int_factor/(coords(1)+gs_epsilon) &
         + basis_vals(jr)*self%dt*DOT_PRODUCT(vel, dpsi)*int_factor/(coords(1)+gs_epsilon) &
         + basis_vals(jr)*self%dt*tmp1(2)*int_factor/(coords(1)+gs_epsilon) &
-        + self%dt*eta*DOT_PRODUCT(basis_grads(:,jr), dpsi)*int_factor/(coords(1)+gs_epsilon)
+        + self%dt*eta_curr*DOT_PRODUCT(basis_grads(:,jr), dpsi)*int_factor/(coords(1)+gs_epsilon)
       ELSE
         res_loc(jr, 6) = res_loc(jr, 6) &
         + basis_vals(jr)*psi*int_factor &
         + basis_vals(jr)*self%dt*DOT_PRODUCT(vel, dpsi)*int_factor &
         + basis_vals(jr)*self%dt*tmp1(2)*int_factor &
-        + self%dt*eta*DOT_PRODUCT(basis_grads(:,jr), dpsi)*int_factor
+        + self%dt*eta_curr*DOT_PRODUCT(basis_grads(:,jr), dpsi)*int_factor
       END IF
       ! --By
       tmp1 = cross_product(dpsi,dvel(2, :))
@@ -1158,7 +1169,7 @@ DO i=1,mesh%nc
         + self%dt*basis_vals(jr)*dvel(3,3)*by*int_factor/(coords(1)+gs_epsilon) &
         + self%dt*basis_vals(jr)*DOT_PRODUCT(vel, dby)*int_factor/(coords(1)+gs_epsilon) &
         - self%dt*basis_vals(jr)*vel(1)*by*int_factor/(coords(1)+gs_epsilon)**2 &
-        + self%dt*eta*DOT_PRODUCT(basis_grads(:,jr), dby)*int_factor/(coords(1)+gs_epsilon)
+        + self%dt*eta_curr*DOT_PRODUCT(basis_grads(:,jr), dby)*int_factor/(coords(1)+gs_epsilon)
       ELSE
         ! Field-line stretching source (B.grad)v_y with the FULL in-plane field
         ! B_in = grad(psi) x yhat + B_0_in ((yhat x B_0) x yhat = B_0_inplane maps B_0
@@ -1177,7 +1188,7 @@ DO i=1,mesh%nc
         + basis_vals(jr)*self%dt*tmp1(2)*int_factor &
         + basis_vals(jr)*self%dt*DOT_PRODUCT(vel, dby)*int_factor &
         + basis_vals(jr)*self%dt*by*div_vel*int_factor &
-        + self%dt*eta*DOT_PRODUCT(basis_grads(:,jr), dby)*int_factor &
+        + self%dt*eta_curr*DOT_PRODUCT(basis_grads(:,jr), dby)*int_factor &
         - self%dt*basis_vals(jr)*S_by*int_factor    ! disruption source S(t)=-dB0z/dt (uniform, time-only)
       END IF
     END DO
@@ -1335,7 +1346,7 @@ LOGICAL :: curved
 INTEGER(i4) :: k, l, m, ik, jr, jc
 INTEGER(i4), POINTER, DIMENSION(:) :: cell_dofs
 REAL(r8) :: n,vel(3),T,psi,by,dT(3),dn(3),dpsi(3),dby(3),dvel(3,3),div_vel
-REAL(r8) :: jac_mat(3,4),jac_det,int_factor,btmp(3),tmp2(3),tmp3(3),coords(3)
+REAL(r8) :: jac_mat(3,4),jac_det,int_factor,btmp(3),tmp2(3),tmp3(3),coords(3),eta_curr
 REAL(r8), ALLOCATABLE, DIMENSION(:) :: basis_vals,n_weights_loc,T_weights_loc
 REAL(r8), ALLOCATABLE, DIMENSION(:) :: psi_weights_loc,by_weights_loc,res_loc
 REAL(r8), ALLOCATABLE, DIMENSION(:,:) :: vel_weights_loc,basis_grads
@@ -1343,7 +1354,7 @@ TYPE(oft_1d_int), ALLOCATABLE, DIMENSION(:) :: iloc
 type(oft_local_mat), allocatable, dimension(:,:) :: jac_loc
 !$omp parallel private(ik, k, l, m,jr,jc,curved,coords,cell_dofs,basis_vals,basis_grads,T_weights_loc, &
 !$omp n_weights_loc,psi_weights_loc, by_weights_loc,vel_weights_loc,res_loc,jac_mat, &
-!$omp jac_det,int_factor,T,n,psi,by,vel,dT,dn,dpsi,dby,dvel,div_vel,btmp,tmp2,tmp3, iloc, jac_loc) reduction(+:diag_vals)
+!$omp jac_det,int_factor,T,n,psi,by,vel,dT,dn,dpsi,dby,dvel,div_vel,btmp,tmp2,tmp3,eta_curr, iloc, jac_loc) reduction(+:diag_vals)
 ALLOCATE(basis_vals(oft_blagrange%nce),basis_grads(3,oft_blagrange%nce))
 ALLOCATE(n_weights_loc(oft_blagrange%nce),vel_weights_loc(3, oft_blagrange%nce),&
         T_weights_loc(oft_blagrange%nce), psi_weights_loc(oft_blagrange%nce),&
@@ -1360,6 +1371,8 @@ DO i=1,mesh%nc
   curved=cell_is_curved(mesh,i) ! Straight cell test
   call oft_blagrange%ncdofs(i,cell_dofs) ! Get global index of local DOFs
   CALL self%fe_rep%mat_zero_local(jac_loc) ! Zero local (cell) contribution to matrix
+  eta_curr = eta   ! region-aware resistivity (conjugate multi-channel wall; eta_reg unset => eta)
+  IF(ASSOCIATED(self%eta_reg)) eta_curr = eta*self%eta_reg(mesh%reg(i))
   n_weights_loc = n_weights(cell_dofs)
   vel_weights_loc = vel_weights(:, cell_dofs)
   T_weights_loc = T_weights(cell_dofs)
@@ -1710,12 +1723,12 @@ DO i=1,mesh%nc
           jac_loc(6, 6)%m(jr,jc) = jac_loc(6, 6)%m(jr,jc) &
           + basis_vals(jr)*basis_vals(jc)*int_factor/(coords(1)+gs_epsilon) &
           + dt_fac*basis_vals(jr)*DOT_PRODUCT(vel,basis_grads(:,jc))*int_factor/(coords(1)+gs_epsilon) &
-          + dt_fac*eta*DOT_PRODUCT(basis_grads(:,jr),basis_grads(:,jc))*int_factor/(coords(1)+gs_epsilon)
+          + dt_fac*eta_curr*DOT_PRODUCT(basis_grads(:,jr),basis_grads(:,jc))*int_factor/(coords(1)+gs_epsilon)
         ELSE
           jac_loc(6, 6)%m(jr,jc) = jac_loc(6, 6)%m(jr,jc) &
           + basis_vals(jr)*basis_vals(jc)*int_factor &
           + dt_fac*basis_vals(jr)*DOT_PRODUCT(vel,basis_grads(:,jc))*int_factor &
-          + dt_fac*eta*DOT_PRODUCT(basis_grads(:,jr),basis_grads(:,jc))*int_factor
+          + dt_fac*eta_curr*DOT_PRODUCT(basis_grads(:,jr),basis_grads(:,jc))*int_factor
         END IF
         !--by, vel
         tmp2 = cross_product(dpsi,basis_grads(:,jc))
@@ -1761,13 +1774,13 @@ DO i=1,mesh%nc
           + dt_fac*basis_vals(jr)*dvel(3,3)*basis_vals(jc)*int_factor/(coords(1)+gs_epsilon) &
           - dt_fac*basis_vals(jr)*vel(1)*basis_vals(jc)*int_factor/(coords(1)+gs_epsilon)**2 &
           + dt_fac*basis_vals(jr)*DOT_PRODUCT(vel, basis_grads(:,jc))*int_factor/(coords(1)+gs_epsilon) &
-          + dt_fac*eta*DOT_PRODUCT(basis_grads(:,jr), basis_grads(:,jc))*int_factor/(coords(1)+gs_epsilon)
+          + dt_fac*eta_curr*DOT_PRODUCT(basis_grads(:,jr), basis_grads(:,jc))*int_factor/(coords(1)+gs_epsilon)
         ELSE
           jac_loc(7, 7)%m(jr,jc) = jac_loc(7, 7)%m(jr,jc) &
           + basis_vals(jr)*basis_vals(jc)*int_factor &
           + basis_vals(jr)*dt_fac*DOT_PRODUCT(basis_grads(:,jc),vel)*int_factor & 
           + basis_vals(jr)*dt_fac*basis_vals(jc)*div_vel*int_factor & 
-          + dt_fac*eta*DOT_PRODUCT(basis_grads(:,jr),basis_grads(:,jc))*int_factor
+          + dt_fac*eta_curr*DOT_PRODUCT(basis_grads(:,jr),basis_grads(:,jc))*int_factor
         END IF
       END DO
     END DO
