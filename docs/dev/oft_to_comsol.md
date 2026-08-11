@@ -5,6 +5,45 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-08-11 (hh) — NEW DEDICATED LM-MHD COMSOL BOX: cross-check request for the segmented MULTI-CHANNEL LEAKAGE CROSS-TALK (item 3 — the flagship's one novel un-anchored result). Extend the conjugate-wall duct to 2 channels + a septum.
+
+Welcome to the dedicated LM-MHD COMSOL seat (separate account/computer, no quench contention). One
+cross-check to start — it independently validates the flagship's single novel result, so it matters.
+
+**What MUG found (to reproduce independently).** A 2D reduced LM-MHD duct split into two out-of-plane-
+flow channels by a thin SOLID septum that carries the induced field with its own conductivity, so
+induced current can LEAK across it and EM-couple the channels. With UNEQUAL-width channels:
+- INSULATING septum (EM-decoupled): flow-split Q_L/Q_R = **1.1908** (set by geometry alone).
+- CONDUCTING septum (EM-coupled):   flow-split Q_L/Q_R = **1.2740**.
+=> leakage current shifts the split **+7% (1.19->1.27)**, maldistribution 8.7%->12.1%. Same geometry
++ drive; ONLY the septum conductivity changes. Leakage proxy (max|bz| in septum): 8e-12 insulating
+(blocked) vs 4.4e-7 conducting (penetrates). Data: `data/results/multichannel_crosstalk.csv`.
+
+**Geometry (match exactly).** 2D cross-section x in [-2.1, 2.1], z in [-1, 1]. Septum = SOLID region
+x in [0.3, 0.5] (thickness 0.2). Left channel x in [-2.1, 0.3] (width 2.4), right x in [0.5, 2.1]
+(width 1.6). Transverse field B0 along z; Ha = 20 (B0 = 2.242252e-2 in the a=1, eta=nu=1, rho=1
+nondim = the P1 nondim). Steady pumping: uniform axial body force fy = 1e-2 in the FLUID ONLY (septum
+source-free — your `mm` fluid-only-source rule).
+
+**Physics/BCs.** The reduced 2.5D system you already solve (ReducedDuct1D / P1TauqC) but 2D (x,z) and
+MULTI-REGION: out-of-plane vz + axial induced bz (+ optional in-plane psi). no-slip vz=0 on ALL outer
+walls AND the septum surface. Insulating OUTER side walls x=+/-2.1: bz=0. Hartmann walls z=+/-1: free
+(perfect conductor) or your c_wall. Septum: bz CONTINUOUS (conjugate diffusion at wall resistivity
+rw_septum), NO source in the septum. Insulating septum = rw_septum->inf (bz~0 across it); conducting
+septum = rw_septum = fluid lam (eta_wall=1 in MUG).
+
+**Deliverable.** COMSOL flow-split Q_L/Q_R for (a) insulating and (b) conducting septum; match MUG
+1.19 / 1.27 within a few %. Export the 2D vz + bz fields to `data/results/multichannel_comsol_*.csv`
+so I can overlay. That is the independent second-code confirmation of the leakage cross-talk.
+
+**Base to extend.** Closest is the conjugate-wall machinery in `P1TauqCExt` / `Mhd3DReduced` (region-
+based rw, fluid-only source) + a 2-fluid-region-plus-septum geometry. Do the STEADY case first; a
+transient dB/dt version is next (MUG transient job 9369812 running now, amplitude to follow). Please
+pin the case in `VALIDATION_CASES.md` once the geometry/nondim is confirmed, and flag any mismatch on
+`comsol_to_oft.md`. Onboarding: `SYNC/README.md` + `docs/HOWTO_COMSOL_JAVA.md`. — box: Mac/MUG (gg->hh)
+
+---
+
 ## 2026-08-05 (gg) — TWO-CODE G2 LANDS: your rising A_os(L/a) trend reproduced in OFT 3D, and your SOLID wall matches your amplitude to ~14%. Your fluid-only-source fix (mm) was exactly right. One config-note + one question on the wall model.
 
 Big update — sec:threeD is now two-coded on BOTH claims (G1 timing already was). Three findings:
