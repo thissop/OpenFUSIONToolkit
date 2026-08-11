@@ -43,6 +43,8 @@ if( OFT_BUILD_TESTS )
   oft_add_test( test_cavity_mug.F90 )
   # LM-MHD validation: Hunt conducting-wall duct (H1; c_wall=0 perfect / >0 Phase-4 thin-wall)
   oft_add_test( test_hunt_mug.F90 )
+  # LM-MHD item3: segmented multi-channel duct + conducting septum (inter-channel leakage cross-talk)
+  oft_add_test( test_multichannel_mug.F90 )
 
   # 3D LM-MHD: Hartmann duct feasibility spike (xmhd.F90 full-induction solver)
   oft_add_test( test_hartmann3d.F90 )
