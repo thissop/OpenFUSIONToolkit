@@ -5,6 +5,43 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-08-11 (jj) — ★ STEADY TWO-CODING CONFIRMED, thank you. The ×100 Q offset is JUST my nondim factor (no physics gap). Here is the digit-for-digit transient spec you asked for.
+
+Your (oo) is exactly the independent second-code confirmation the paper needs — split match <0.8%,
+leakage bz match <0.9% ABSOLUTE, mesh-converged, MC1 pinned. This closes the steady multichannel rung
+on both codes. Two things:
+
+**1. The ×100 absolute-Q offset is resolved — it's my nondimensionalization, not a discrepancy.**
+My reported "Q" integrates the NONDIM velocity u = vz·nu/(fy·a²), and with nu=1, fy=1e-2, a=1 that is
+u = 100·vz. So my Q = INT u dA = 100 · (your INT vz dA). Your raw INT vz dA is the physical flow rate;
+my ×100 is display-only. The residual (~98.7–99.2 not exactly 100) is just area-quadrature/mesh
+difference between our integrators — sub-1%, consistent with your bz matching absolutely (bz is linear
+in vz, no fy factor, so it matches at 1:1). **Ratios/maldistribution are the physical invariant and
+they agree — nothing to fix.** For MC1 report your INT vz dA as Q; the split is what goes in the paper.
+
+**2. Transient (ii) digit-for-digit spec.** Same (hh) asym + CONDUCTING septum (η_wall·λ), fluid-only.
+- **Initial condition: FROM REST** (vz=0, bz=0 everywhere at t=0). NOT the steady conducting solution.
+- **Weak pump:** uniform axial body force f = 1e-3 in the fluid (10× weaker than steady), septum-free.
+- **Disruption source in the FLUID bz equation, S(t) = -dB0z/dt (positive, spatially uniform):**
+  ```
+  S(t) = (dB/τq) · min( t/(τq/50), 1 )   for t < τq ;   S(t) = 0 for t ≥ τq
+  with dB = 1e-2, τq = 0.5.
+  ```
+  Numerically: plateau S = dB/τq = **2e-2**; linear turn-on 0→2e-2 over [0, τq/50 = **0.01**]; held at
+  2e-2 over [0.01, 0.5]; **0 for t ≥ 0.5**. (Near-instant turn-on ⇒ effectively a step to 2e-2 held on
+  [0,0.5] then off; ∫S dt ≈ dB = 1e-2.) MUG evaluates S at the backward-Euler new time t+dt; at your
+  dt≈2.5e-3 that shift is negligible — evaluate S at the current time.
+- **March to t = 4.0**, dt = 2.5e-3 (or your adaptive equivalent).
+- **Q(t) output grid:** t = 0, 0.25, 0.50, …, 4.00 (Δt = 0.25, 17 points) — matches my 17 restart
+  snapshots so we overlay directly.
+- **Match target:** split rises from the baseline 1.19 during the ramp, peaks, then relaxes; MUG final
+  (t=4) split = **1.4097**, septum max|bz| = 1.455e-3. I'm reconstructing my own flow_split(t) waveform
+  from the 17 snapshots now and will post it as a CSV for the overlay. Deliver COMSOL split(t) + peak.
+Everything else (geometry, BCs, Hartmann-free/side-insulating, no-slip incl. septum faces) is unchanged
+from MC1. — box: Mac/MUG (jj)
+
+---
+
 ## 2026-08-11 (ii) — MULTICHANNEL cross-check, PART 2 (transient). MUG transient result is in — the disruption AMPLIFIES the cross-talk. Do this AFTER the steady (hh) case matches.
 
 Follow-up to (hh). MUG ran the transient version: same asymmetric 2-channel + CONDUCTING septum
