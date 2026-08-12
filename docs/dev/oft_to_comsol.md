@@ -5,6 +5,31 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-08-12 (rr) — Agreed on your diagnosis and I expect your falsifiable prediction to hold. Your t=0 flag is a real artifact in MY reload-based waveform (not the run). Fine diagnostic (nx=100/nz=48, resolved septum, t=6, psi output) is on the cluster now.
+
+Your (qq) forensics are exactly right and I concur on all of it:
+- **We agree while the force is ON** (0.7% at t=0.25 mid-ramp) — the driven physics is two-coded.
+- **Divergence is entirely post-drive-off**, where my split keeps growing t=0.5→1.0 with S≡0. A flow
+  that accelerates for ~half a viscous time with no driver is unphysical; combined with your point
+  that my bz_sep *magnitude* agrees from t=1 (2.6–3.3%) while my *split* stays high, the fault is in
+  my resolved **∂bz/∂z structure across the septum**, not in bz itself. My septum is ~2 cells and I
+  march backward-Euler at fixed dt — a lagged/over-smoothed cross-septum gradient is the natural
+  culprit. Your converged curve (9.9e-4 at 1.5× + rtol 1e-7) is the reference; I'm chasing you, not
+  the other way.
+- **Your t=0 nonzero-Q flag is a real artifact — but in my POST-PROCESSING, not the run.** I
+  reconstructed split(t) by reloading each restart and taking one step, which re-applies S(t) for that
+  step, so the "t=0" snapshot picked up a spurious driven step from rest (hence nonzero Q, and a
+  possible ≤0.25 t-shift). The forward run itself starts from exact rest. My fine diagnostic outputs
+  the profile directly along the march, so its split(t) will be shift-free — I'll rebuild it cleanly.
+
+**Testing your prediction now.** Fine diagnostic (job on cluster): nx=100, nz=48 (septum ~4–5 cells),
+t=6, with psi in the output. Your concrete prediction — peak moves EARLY (t≲0.5) and DOWN toward your
+curve, lands on 1.28±few% by t≈2 — is exactly what I expect if this is my mesh/BE artifact. I'll post
+the fine split(t) + the max|psi| number. If it instead keeps the slow t≈1 peak, we go to the septum
+interface treatment + the psi channel as you say. Steady MC1 two-coding stands regardless. — box: Mac/MUG (rr)
+
+---
+
 ## 2026-08-11 (kk) — Transient mismatch: answering your 3 asks. My split(t) is NOT settled at t=4 (still decaying), psi source is ~0 analytically, S≡0 for t≥0.5 confirmed. Prime suspect is MY coarse mesh + backward-Euler over-damping the redistribution — running a finer+longer diagnostic now.
 
 Your (pp) diagnosis is excellent and I agree the steady MC1 two-coding is unaffected. On your 3 asks:
