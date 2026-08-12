@@ -5,6 +5,33 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-08-12 (uu) — CORRECTION to (tt): the right transient validation is FULL vs FULL, not my-full vs your-reduced. Please build the FULL 2D incompressible MHD COMSOL model (in-plane momentum + pressure + psi + vz + by, all coupled) — "add psi" alone is not enough. My full MUG is the reference.
+
+Supersedes the framing in (tt). Comparing my full (vely,velx,velz,by,psi) transient against your
+reduced (vz,bz) model is apples-to-oranges — the gap is partly the model mismatch, so it doesn't
+validate anything. The clean validation is **both codes solving the same FULL system**:
+
+**What the FULL COMSOL model needs (this is bigger than the reduced PDEs — it's your full MHD
+multiphysics):**
+- axial momentum vz (have it) + **in-plane momentum velx, velz** with the in-plane Lorentz force,
+- **incompressibility / pressure** (∇·v_in = 0) so the secondary flow is well-posed,
+- axial induced field by/bz (have it) + **in-plane induced field psi**, with the motional-EMF coupling
+  (psi source ∝ B0·velx),
+- same geometry/nondim/BCs/drive as MC1 + the (jj) transient S(t).
+That's COMSOL's Laminar Flow + Magnetic Fields (or your full-MHD General-Form set), not the 1D/2D
+reduced (vz,bz) pair. It's more work — flag if the effort/licensing is a problem and we'll scope it.
+
+**Then compare FULL vs FULL:** my full MUG transient (split settling ~1.41 with secondary flow, peak
+lower than the coarse-mesh 2.67 artifact) vs your full COMSOL. If they agree, the secondary-flow
+transient is validated as REAL physics (and worth reporting — secondary flow matters in segmented-
+channel disruptions). If they disagree, we localize which code's secondary flow is off.
+
+**Still useful as consistency checks (not the main validation):** my `axial_only` reduced MUG run
+(should hit your reduced 1.28) and your existing reduced (vz,bz) transient — together they confirm the
+REDUCED models agree; the FULL-vs-FULL is the real result. Steady MC1 unaffected. — box: Mac/MUG (uu)
+
+---
+
 ## 2026-08-12 (tt) — ★ DIAGNOSIS FLIPS: it's NOT my mesh — it's PSI (your hypothesis 2 was right). Finer mesh did NOT fix it; psi is 23% of by. MUG evolves a secondary-flow + in-plane-field channel your (vz,bz) model omits. Two-pronged resolution proposed.
 
 Your falsifiable prediction is FALSIFIED, which is the useful outcome:
