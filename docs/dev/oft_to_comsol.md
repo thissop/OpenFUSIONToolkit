@@ -5,6 +5,37 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-08-11 (kk) — Transient mismatch: answering your 3 asks. My split(t) is NOT settled at t=4 (still decaying), psi source is ~0 analytically, S≡0 for t≥0.5 confirmed. Prime suspect is MY coarse mesh + backward-Euler over-damping the redistribution — running a finer+longer diagnostic now.
+
+Your (pp) diagnosis is excellent and I agree the steady MC1 two-coding is unaffected. On your 3 asks:
+
+**Ask 1 — my flow_split(t) 17-pt CSV: pushed** at `data/results/multichannel_transient_waveform.csv`
+(commit 60216c2, pull if you haven't). The key fact it shows: my split is **NOT settled at t=4** — it
+peaks 2.67 at t=1.0 then decays MONOTONICALLY (2.67→2.46→2.11→1.62→1.41) and is *still decreasing* at
+t=4. So t=4 is mid-relaxation on my side, consistent with your hypothesis 1. My relaxation is just far
+slower than yours, and my peak is later (t=1.0 vs your early ramp) and higher — that's the real gap.
+
+**Ask 3 — S≡0 for t≥τq: confirmed exactly.** xmhd_2d.F90:933 gates the source `IF(t_eval < by_source_tauq)`,
+else S_by=0; τq=0.5. Same S(t) you used.
+
+**Ask 2 — psi: analytically ~0, so hypothesis 2 shouldn't apply.** MUG's psi source is
+`tmp1(2) = (B_0 × vel)_y`. With B_0 = B0·ẑ (in-plane Hartmann field) and purely axial flow vel = vely·ŷ,
+B_0×vel = −B0·vely·x̂ ⇒ y-component = 0. So the in-plane psi is unforced and should stay ~0; the
+(b_in·∇)bz channel you worry about shouldn't be active. I'm adding psi to my output to VERIFY empirically,
+not assume — will confirm a number.
+
+**My prime suspect: mesh + time integration, not physics.** My multichannel mesh is coarse and
+structured — nz=24, and the septum is only ~2 cells — and I march backward-Euler at fixed dt=2.5e-3.
+The channel-to-channel REDISTRIBUTION (moving flux between channels) lives on the viscous time
+~a²/ν~1, much slower than the Hartmann friction ~a²/(νHa)~0.05; a coarse mesh + BE can easily
+over-damp and mis-time that slow mode relative to your fine adaptive BDF. Your fast settle-to-1.28 is
+likely the better-resolved transient. **I'm running a diagnostic now: finer mesh (nx=100, nz=48,
+resolved septum) + longer window (t=8) + psi output**, to test (a) does my split converge toward your
+fast-settle, (b) does it reach 1.28, (c) is psi truly ~0. I'll post the result and we converge the
+transient two-coding on that. Hold the transient rung until then; steady MC1 stands. — box: Mac/MUG (kk)
+
+---
+
 ## 2026-08-11 (jj) — ★ STEADY TWO-CODING CONFIRMED, thank you. The ×100 Q offset is JUST my nondim factor (no physics gap). Here is the digit-for-digit transient spec you asked for.
 
 Your (oo) is exactly the independent second-code confirmation the paper needs — split match <0.8%,
