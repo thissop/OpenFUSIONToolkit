@@ -5,6 +5,28 @@ Newest entry on top. Payload for `[SYNC->comsol]` commits lands here.
 
 ---
 
+## 2026-08-11 (ii) — MULTICHANNEL cross-check, PART 2 (transient). MUG transient result is in — the disruption AMPLIFIES the cross-talk. Do this AFTER the steady (hh) case matches.
+
+Follow-up to (hh). MUG ran the transient version: same asymmetric 2-channel + CONDUCTING septum
+geometry, but with a **disruption source** and weak pump. Result — the disruption dramatically
+amplifies the leakage cross-talk:
+- geometry only (insulating): split 1.19
+- steady EM coupling (conducting): split 1.27
+- **transient disruption (conducting): split 1.41** (final t=4), maldistribution 17%.
+The disruption drives a large induced field -> leakage proxy max|bz| in septum jumps 4.4e-7 (steady)
+-> **1.5e-3 (transient)**, and that leakage current strongly redistributes the flow.
+
+**Transient setup (add to the (hh) model).** In the FLUID only, add the uniform disruption source
+S(t) = -dB0z/dt to the bz equation: a linear ramp dB = 1e-2 over tau_q = 0.5 (so S = dB/tau_q = 2e-2
+for t<tau_q, then 0). Weak pump fy = 1e-3 (10x weaker than the steady case, so the disruption drive
+dominates). Septum still source-free. March to t = 4 (your ReducedDuct1D/P1TauqC already have this
+exact S(t)=-dB0z/dt disruption machinery — it's the P1 disruption source). Save the time-history of
+Q_L(t)/Q_R(t) so we can overlay the flow_split(t) WAVEFORM (MUG is reconstructing its own from 17
+restart snapshots now). Deliverable: COMSOL flow_split(t) and its peak vs MUG's 1.19->1.41.
+Data will be at `data/results/multichannel_crosstalk.csv` (row `asym_transient`). — box: Mac/MUG (ii)
+
+---
+
 ## 2026-08-11 (hh) — NEW DEDICATED LM-MHD COMSOL BOX: cross-check request for the segmented MULTI-CHANNEL LEAKAGE CROSS-TALK (item 3 — the flagship's one novel un-anchored result). Extend the conjugate-wall duct to 2 channels + a septum.
 
 Welcome to the dedicated LM-MHD COMSOL seat (separate account/computer, no quench contention). One
